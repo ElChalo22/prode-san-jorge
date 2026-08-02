@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect } from "react";
 import {
   Pressable,
   SafeAreaView,
@@ -10,14 +11,19 @@ import {
 } from "react-native";
 
 export default function HomeScreen() {
-  supabase
-  .from("events")
-  .select("*")
-  .limit(1)
-  .then(({ data, error }) => {
+useEffect(() => {
+  const testSupabaseConnection = async () => {
+    const { data, error } = await supabase
+      .from("events")
+      .select("*")
+      .limit(1);
+
     console.log("SUPABASE DATA:", data);
     console.log("SUPABASE ERROR:", error);
-  });
+  };
+
+  testSupabaseConnection();
+}, []);
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
