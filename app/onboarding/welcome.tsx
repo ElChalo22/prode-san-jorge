@@ -1,13 +1,13 @@
+import { Button } from "@/components";
 import AnimatedShield from "@/components/AnimatedShield";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef } from "react";
 import {
-    Animated,
-    Dimensions,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Animated,
+  Dimensions,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 const { width, height } = Dimensions.get("window");
@@ -25,6 +25,57 @@ const CLUBS = [
   { name: "AAAJ", symbol: "A" },
 ];
 
+const SHIELD_POSITIONS = [
+  {
+    left: width * 0.08,
+    top: height * 0.1,
+    rotation: "-8deg",
+    scale: 1.05,
+  },
+  {
+    left: width * 0.62,
+    top: height * 0.12,
+    rotation: "7deg",
+    scale: 0.9,
+  },
+  {
+    left: width * 0.32,
+    top: height * 0.23,
+    rotation: "-3deg",
+    scale: 1,
+  },
+  {
+    left: width * 0.72,
+    top: height * 0.34,
+    rotation: "9deg",
+    scale: 0.82,
+  },
+  {
+    left: width * 0.06,
+    top: height * 0.4,
+    rotation: "-7deg",
+    scale: 0.88,
+  },
+  {
+    left: width * 0.14,
+    top: height * 0.7,
+    rotation: "5deg",
+    scale: 0.84,
+  },
+  {
+    left: width * 0.62,
+    top: height * 0.68,
+    rotation: "-5deg",
+    scale: 1,
+  },
+  {
+    left: width * 0.38,
+    top: height * 0.82,
+    rotation: "4deg",
+    scale: 0.78,
+  },
+];
+
 function shuffle<T>(items: T[]) {
   return [...items].sort(() => Math.random() - 0.5);
 }
@@ -34,13 +85,15 @@ export default function WelcomeScreen() {
 
   const shieldsOpacity = useRef(new Animated.Value(0)).current;
   const shieldsScale = useRef(new Animated.Value(0.8)).current;
+
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.9)).current;
+
   const buttonOpacity = useRef(new Animated.Value(0)).current;
   const buttonTranslate = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
-    Animated.sequence([
+    const animation = Animated.sequence([
       Animated.parallel([
         Animated.timing(shieldsOpacity, {
           toValue: 0.38,
@@ -87,7 +140,13 @@ export default function WelcomeScreen() {
           useNativeDriver: true,
         }),
       ]),
-    ]).start();
+    ]);
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
   }, [
     buttonOpacity,
     buttonTranslate,
@@ -97,9 +156,14 @@ export default function WelcomeScreen() {
     shieldsScale,
   ]);
 
+  const handleStart = () => {
+    router.push("/onboarding/login");
+  };
+
   return (
     <View style={styles.container}>
       <Animated.View
+        pointerEvents="none"
         style={[
           styles.shieldsLayer,
           {
@@ -108,18 +172,22 @@ export default function WelcomeScreen() {
           },
         ]}
       >
-  {selectedClubs.map((club, index) => (
-  <AnimatedShield
-    key={`${club.name}-${index}`}
-    name={club.name}
-    symbol={club.symbol}
-    left={SHIELD_POSITIONS[index].left}
-    top={SHIELD_POSITIONS[index].top}
-    rotation={SHIELD_POSITIONS[index].rotation}
-    scale={SHIELD_POSITIONS[index].scale}
-    delay={index * 120}
-  />
-))}
+        {selectedClubs.map((club, index) => {
+          const position = SHIELD_POSITIONS[index];
+
+          return (
+            <AnimatedShield
+              key={`${club.name}-${index}`}
+              name={club.name}
+              symbol={club.symbol}
+              left={position.left}
+              top={position.top}
+              rotation={position.rotation}
+              scale={position.scale}
+              delay={index * 120}
+            />
+          );
+        })}
       </Animated.View>
 
       <Animated.View
@@ -132,11 +200,14 @@ export default function WelcomeScreen() {
         ]}
       >
         <Text style={styles.logoMain}>PRODE</Text>
+
         <Text style={styles.logoSecondary}>SAN JORGE</Text>
 
         <View style={styles.logoDivider}>
           <View style={styles.line} />
+
           <Text style={styles.ball}>⚽</Text>
+
           <View style={styles.line} />
         </View>
 
@@ -154,30 +225,15 @@ export default function WelcomeScreen() {
           },
         ]}
       >
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => router.push("/onboarding/login")}
-        >
-          <Text style={styles.buttonText}>COMENZAR</Text>
-        </Pressable>
+        <Button
+          title="COMENZAR"
+          variant="white"
+          onPress={handleStart}
+        />
       </Animated.View>
     </View>
   );
 }
-
-const SHIELD_POSITIONS = [
-  { left: width * 0.08, top: height * 0.1, rotation: "-8deg", scale: 1.05 },
-  { left: width * 0.62, top: height * 0.12, rotation: "7deg", scale: 0.9 },
-  { left: width * 0.32, top: height * 0.23, rotation: "-3deg", scale: 1 },
-  { left: width * 0.72, top: height * 0.34, rotation: "9deg", scale: 0.82 },
-  { left: width * 0.06, top: height * 0.4, rotation: "-7deg", scale: 0.88 },
-  { left: width * 0.14, top: height * 0.7, rotation: "5deg", scale: 0.84 },
-  { left: width * 0.62, top: height * 0.68, rotation: "-5deg", scale: 1 },
-  { left: width * 0.38, top: height * 0.82, rotation: "4deg", scale: 0.78 },
-];
 
 const styles = StyleSheet.create({
   container: {
@@ -190,32 +246,6 @@ const styles = StyleSheet.create({
 
   shieldsLayer: {
     ...StyleSheet.absoluteFillObject,
-  },
-
-  shield: {
-    position: "absolute",
-    width: 86,
-    height: 96,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    borderRadius: 24,
-    backgroundColor: "#11151A",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  shieldSymbol: {
-    color: "#FFFFFF",
-    fontSize: 26,
-    fontWeight: "900",
-  },
-
-  shieldName: {
-    color: "#FFFFFF",
-    fontSize: 8,
-    fontWeight: "800",
-    marginTop: 5,
-    letterSpacing: 0.6,
   },
 
   logoContainer: {
@@ -274,25 +304,5 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingHorizontal: 26,
     zIndex: 3,
-  },
-
-  button: {
-    height: 58,
-    borderRadius: 17,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  buttonPressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.98 }],
-  },
-
-  buttonText: {
-    color: "#080A0D",
-    fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: 0.8,
   },
 });
