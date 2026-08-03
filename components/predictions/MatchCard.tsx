@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-export type Prediction = "1" | "X" | "2";
+export type Prediction = "1" | "X" | "2" | "1X" | "X2";
 
 type MatchCardProps = {
   number: number;
@@ -9,9 +9,14 @@ type MatchCardProps = {
   visitante: string;
   selected?: Prediction;
   onSelect: (prediction: Prediction) => void;
+  showDoubleOptions?: boolean;
+  doubleLimitReached?: boolean;
+  onDoubleLimitReached?: () => void;
 };
 
-const OPTIONS: Prediction[] = ["1", "X", "2"];
+export const isDoublePrediction = (
+  prediction?: Prediction
+) => prediction === "1X" || prediction === "X2";
 
 export default function MatchCard({
   number,
@@ -19,217 +24,445 @@ export default function MatchCard({
   visitante,
   selected,
   onSelect,
+  showDoubleOptions = false,
+  doubleLimitReached = false,
+  onDoubleLimitReached,
 }: MatchCardProps) {
-  const getDescription = (option: Prediction) => {
-    if (option === "1") return "Local";
-    if (option === "X") return "Empate";
+  const seleccionar = (prediction: Prediction) => {
+    const seleccionActualEsDoble =
+      isDoublePrediction(selected);
 
-    return "Visitante";
+    const nuevaSeleccionEsDoble =
+      isDoublePrediction(prediction);
+
+    if (
+      nuevaSeleccionEsDoble &&
+      doubleLimitReached &&
+      !seleccionActualEsDoble
+    ) {
+      onDoubleLimitReached?.();
+      return;
+    }
+
+    onSelect(prediction);
   };
 
+  const dobleDeshabilitado =
+    doubleLimitReached && !isDoublePrediction(selected);
+
   return (
-    <View style={styles.matchCard}>
-      <Text style={styles.matchNumber}>PARTIDO {number}</Text>
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <Text style={styles.matchNumber}>
+          PARTIDO {number}
+        </Text>
 
-      <View style={styles.teamsRow}>
-        <View style={styles.team}>
-          <View style={styles.shield}>
+        {isDoublePrediction(selected) && (
+          <View style={styles.doubleBadge}>
             <Ionicons
-              name="shield-outline"
-              size={28}
-              color="#111111"
+              name="shield-checkmark"
+              size={12}
+              color="#9A6513"
             />
+
+            <Text style={styles.doubleBadgeText}>
+              DOBLE
+            </Text>
           </View>
-
-          <Text style={styles.teamName}>{local}</Text>
-          <Text style={styles.teamType}>Local</Text>
-        </View>
-
-        <View style={styles.vsCircle}>
-          <Text style={styles.vsText}>VS</Text>
-        </View>
-
-        <View style={styles.team}>
-          <View style={styles.shield}>
-            <Ionicons
-              name="shield-outline"
-              size={28}
-              color="#111111"
-            />
-          </View>
-
-          <Text style={styles.teamName}>{visitante}</Text>
-          <Text style={styles.teamType}>Visitante</Text>
-        </View>
+        )}
       </View>
 
-      <View style={styles.optionsRow}>
-        {OPTIONS.map((option) => {
-          const isSelected = selected === option;
+      <View style={styles.predictionRow}>
+        <Pressable
+          onPress={() => seleccionar("1")}
+          style={({ pressed }) => [
+            styles.teamButton,
+            selected === "1" && styles.simpleSelected,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View
+            style={[
+              styles.shield,
+              selected === "1" && styles.shieldSelected,
+            ]}
+          >
+            <Ionicons
+              name="shield-outline"
+              size={25}
+              color={
+                selected === "1" ? "#FFFFFF" : "#111111"
+              }
+            />
+          </View>
 
-          return (
+          <Text
+            numberOfLines={2}
+            style={[
+              styles.teamName,
+              selected === "1" && styles.selectedText,
+            ]}
+          >
+            {local}
+          </Text>
+
+          <Text
+            style={[
+              styles.teamResult,
+              selected === "1" && styles.selectedText,
+            ]}
+          >
+            Gana
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => seleccionar("X")}
+          style={({ pressed }) => [
+            styles.drawButton,
+            selected === "X" && styles.simpleSelected,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text
+            style={[
+              styles.drawSymbol,
+              selected === "X" && styles.selectedText,
+            ]}
+          >
+            X
+          </Text>
+
+          <Text
+            style={[
+              styles.drawText,
+              selected === "X" && styles.selectedText,
+            ]}
+          >
+            Empate
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => seleccionar("2")}
+          style={({ pressed }) => [
+            styles.teamButton,
+            selected === "2" && styles.simpleSelected,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View
+            style={[
+              styles.shield,
+              selected === "2" && styles.shieldSelected,
+            ]}
+          >
+            <Ionicons
+              name="shield-outline"
+              size={25}
+              color={
+                selected === "2" ? "#FFFFFF" : "#111111"
+              }
+            />
+          </View>
+
+          <Text
+            numberOfLines={2}
+            style={[
+              styles.teamName,
+              selected === "2" && styles.selectedText,
+            ]}
+          >
+            {visitante}
+          </Text>
+
+          <Text
+            style={[
+              styles.teamResult,
+              selected === "2" && styles.selectedText,
+            ]}
+          >
+            Gana
+          </Text>
+        </Pressable>
+      </View>
+
+      {showDoubleOptions && (
+        <View style={styles.doubleSection}>
+          <View style={styles.doubleTitleRow}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={15}
+              color="#9A6513"
+            />
+
+            <Text style={styles.doubleTitle}>
+              Doble oportunidad
+            </Text>
+          </View>
+
+          <View style={styles.doubleOptions}>
             <Pressable
-              key={option}
-              onPress={() => onSelect(option)}
+              disabled={dobleDeshabilitado}
+              onPress={() => seleccionar("1X")}
               style={({ pressed }) => [
-                styles.optionButton,
-                isSelected && styles.optionSelected,
-                pressed && styles.optionPressed,
+                styles.doubleButton,
+                selected === "1X" &&
+                  styles.doubleSelected,
+                dobleDeshabilitado &&
+                  styles.doubleDisabled,
+                pressed &&
+                  !dobleDeshabilitado &&
+                  styles.pressed,
               ]}
             >
-              <Text
-                style={[
-                  styles.optionText,
-                  isSelected && styles.optionTextSelected,
-                ]}
-              >
-                {option}
-              </Text>
+              <Ionicons
+                name="shield-outline"
+                size={16}
+                color={
+                  selected === "1X"
+                    ? "#FFFFFF"
+                    : "#8A5A12"
+                }
+              />
 
               <Text
                 style={[
-                  styles.optionDescription,
-                  isSelected && styles.optionTextSelected,
+                  styles.doubleButtonText,
+                  selected === "1X" &&
+                    styles.selectedText,
                 ]}
               >
-                {getDescription(option)}
+                {local} gana o empata
               </Text>
-
-              {isSelected && (
-                <Ionicons
-                  name="checkmark-circle"
-                  size={17}
-                  color="#FFFFFF"
-                  style={styles.checkIcon}
-                />
-              )}
             </Pressable>
-          );
-        })}
-      </View>
+
+            <Pressable
+              disabled={dobleDeshabilitado}
+              onPress={() => seleccionar("X2")}
+              style={({ pressed }) => [
+                styles.doubleButton,
+                selected === "X2" &&
+                  styles.doubleSelected,
+                dobleDeshabilitado &&
+                  styles.doubleDisabled,
+                pressed &&
+                  !dobleDeshabilitado &&
+                  styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="shield-outline"
+                size={16}
+                color={
+                  selected === "X2"
+                    ? "#FFFFFF"
+                    : "#8A5A12"
+                }
+              />
+
+              <Text
+                style={[
+                  styles.doubleButtonText,
+                  selected === "X2" &&
+                    styles.selectedText,
+                ]}
+              >
+                {visitante} gana o empata
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  matchCard: {
+  card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 14,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E8E8E8",
     shadowColor: "#000000",
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 3,
     },
     elevation: 2,
   },
 
-  matchNumber: {
-    color: "#777777",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-  },
-
-  teamsRow: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginVertical: 22,
+    marginBottom: 10,
   },
 
-  team: {
-    width: "38%",
+  matchNumber: {
+    color: "#777777",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+  },
+
+  doubleBadge: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FFF0C7",
+    borderRadius: 20,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+
+  doubleBadgeText: {
+    color: "#9A6513",
+    fontSize: 8,
+    fontWeight: "900",
+  },
+
+  predictionRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+  },
+
+  teamButton: {
+    flex: 1,
+    minHeight: 100,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F5",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+    paddingVertical: 9,
+  },
+
+  drawButton: {
+    width: 68,
+    minHeight: 100,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  simpleSelected: {
+    backgroundColor: "#18A558",
   },
 
   shield: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: "#F3F3F3",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
+    marginBottom: 5,
+  },
+
+  shieldSelected: {
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
 
   teamName: {
     color: "#111111",
-    fontSize: 14,
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: "800",
     textAlign: "center",
-    minHeight: 35,
+    minHeight: 28,
   },
 
-  teamType: {
+  teamResult: {
     color: "#777777",
-    fontSize: 11,
-    marginTop: 3,
-  },
-
-  vsCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#171717",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  vsText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "900",
-  },
-
-  optionsRow: {
-    flexDirection: "row",
-    gap: 9,
-  },
-
-  optionButton: {
-    flex: 1,
-    height: 68,
-    borderRadius: 14,
-    backgroundColor: "#F1F2F3",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  optionSelected: {
-    backgroundColor: "#18A558",
-  },
-
-  optionPressed: {
-    transform: [{ scale: 0.95 }],
-    opacity: 0.85,
-  },
-
-  optionText: {
-    color: "#111111",
-    fontSize: 21,
-    fontWeight: "900",
-  },
-
-  optionDescription: {
-    color: "#777777",
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "700",
     marginTop: 2,
   },
 
-  optionTextSelected: {
+  drawSymbol: {
+    color: "#111111",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+
+  drawText: {
+    color: "#777777",
+    fontSize: 9,
+    fontWeight: "700",
+    marginTop: 3,
+  },
+
+  selectedText: {
     color: "#FFFFFF",
   },
 
-  checkIcon: {
-    position: "absolute",
-    top: 6,
-    right: 6,
+  doubleSection: {
+    borderTopWidth: 1,
+    borderTopColor: "#EEEEEE",
+    marginTop: 11,
+    paddingTop: 10,
+  },
+
+  doubleTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 8,
+  },
+
+  doubleTitle: {
+    color: "#8A5A12",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  doubleOptions: {
+    flexDirection: "row",
+    gap: 7,
+  },
+
+  doubleButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 11,
+    backgroundColor: "#FFF8E8",
+    borderWidth: 1,
+    borderColor: "#EED89D",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 6,
+  },
+
+  doubleSelected: {
+    backgroundColor: "#B7791F",
+    borderColor: "#B7791F",
+  },
+
+  doubleDisabled: {
+    opacity: 0.4,
+  },
+
+  doubleButtonText: {
+    flex: 1,
+    color: "#805B17",
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+  pressed: {
+    transform: [{ scale: 0.97 }],
+    opacity: 0.82,
   },
 });

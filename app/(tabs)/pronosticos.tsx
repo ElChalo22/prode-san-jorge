@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import MatchCard, {
+  isDoublePrediction,
   Prediction,
 } from "../../components/predictions/MatchCard";
 
@@ -43,13 +44,37 @@ const PARTIDOS: Match[] = [
   },
 ];
 
+/*
+  Valor temporal para pruebas.
+
+  Más adelante vendrá desde Supabase y podrá ser modificado
+  fácilmente por el administrador para cada fecha.
+*/
+const MAX_DOBLES_POR_USUARIO = 2;
+
 export default function PronosticosScreen() {
   const [pronosticos, setPronosticos] = useState<
     Record<number, Prediction>
   >({});
 
   const completados = Object.keys(pronosticos).length;
-  const progreso = (completados / PARTIDOS.length) * 100;
+
+  const doblesUsados = Object.values(pronosticos).filter(
+    isDoublePrediction
+  ).length;
+
+  const progreso =
+    PARTIDOS.length === 0
+      ? 0
+      : (completados / PARTIDOS.length) * 100;
+
+  const progresoDobles =
+    MAX_DOBLES_POR_USUARIO === 0
+      ? 0
+      : (doblesUsados / MAX_DOBLES_POR_USUARIO) * 100;
+
+  const limiteDoblesAlcanzado =
+    doblesUsados >= MAX_DOBLES_POR_USUARIO;
 
   const seleccionarPronostico = (
     partidoId: number,
@@ -59,6 +84,19 @@ export default function PronosticosScreen() {
       ...actuales,
       [partidoId]: opcion,
     }));
+  };
+
+  const mostrarAvisoLimiteDobles = () => {
+    Alert.alert(
+      "Límite alcanzado",
+      `Solo podés usar doble oportunidad en ${
+        MAX_DOBLES_POR_USUARIO
+      } ${
+        MAX_DOBLES_POR_USUARIO === 1
+          ? "partido"
+          : "partidos"
+      } de esta fecha.`
+    );
   };
 
   const guardarPronosticos = () => {
@@ -98,7 +136,7 @@ export default function PronosticosScreen() {
             <Text style={styles.title}>Mis pronósticos</Text>
 
             <Text style={styles.subtitle}>
-              Elegí ganador local, empate o ganador visitante.
+              Elegí el resultado que creés que tendrá cada partido.
             </Text>
           </View>
 
@@ -140,6 +178,73 @@ export default function PronosticosScreen() {
           </Text>
         </View>
 
+        {MAX_DOBLES_POR_USUARIO > 0 && (
+          <View style={styles.doubleCard}>
+            <View style={styles.doubleHeader}>
+              <View style={styles.doubleTitleContainer}>
+                <View style={styles.doubleIcon}>
+                  <Ionicons
+                    name="shield-checkmark-outline"
+                    size={21}
+                    color="#9A6513"
+                  />
+                </View>
+
+                <View>
+                  <Text style={styles.doubleLabel}>
+                    DOBLE OPORTUNIDAD
+                  </Text>
+
+                  <Text style={styles.doubleTitle}>
+                    Dobles disponibles
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.doubleCounter}>
+                {doblesUsados}/{MAX_DOBLES_POR_USUARIO}
+              </Text>
+            </View>
+
+            <Text style={styles.doubleDescription}>
+              Podés elegir dos posibles resultados en hasta{" "}
+              {MAX_DOBLES_POR_USUARIO}{" "}
+              {MAX_DOBLES_POR_USUARIO === 1
+                ? "partido"
+                : "partidos"}{" "}
+              de esta fecha.
+            </Text>
+
+            <View style={styles.doubleProgressBackground}>
+              <View
+                style={[
+                  styles.doubleProgressFill,
+                  {
+                    width: `${Math.min(
+                      progresoDobles,
+                      100
+                    )}%`,
+                  },
+                ]}
+              />
+            </View>
+
+            <Text style={styles.doubleMessage}>
+              {limiteDoblesAlcanzado
+                ? "Ya utilizaste todos los dobles disponibles."
+                : `Todavía podés usar ${
+                    MAX_DOBLES_POR_USUARIO - doblesUsados
+                  } ${
+                    MAX_DOBLES_POR_USUARIO -
+                      doblesUsados ===
+                    1
+                      ? "doble"
+                      : "dobles"
+                  }.`}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.instructions}>
           <Ionicons
             name="information-circle-outline"
@@ -159,9 +264,12 @@ export default function PronosticosScreen() {
             local={partido.local}
             visitante={partido.visitante}
             selected={pronosticos[partido.id]}
-            onSelect={(option) =>
-              seleccionarPronostico(partido.id, option)
+            onSelect={(opcion) =>
+              seleccionarPronostico(partido.id, opcion)
             }
+            showDoubleOptions={MAX_DOBLES_POR_USUARIO > 0}
+            doubleLimitReached={limiteDoblesAlcanzado}
+            onDoubleLimitReached={mostrarAvisoLimiteDobles}
           />
         ))}
 
@@ -292,6 +400,84 @@ const styles = StyleSheet.create({
     color: "#777777",
     fontSize: 11,
     marginTop: 9,
+  },
+
+  doubleCard: {
+    backgroundColor: "#FFF9EA",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#EED89D",
+  },
+
+  doubleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  doubleTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  doubleIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#FFF0C7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  doubleLabel: {
+    color: "#9A6513",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  doubleTitle: {
+    color: "#5E430F",
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+
+  doubleCounter: {
+    color: "#9A6513",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+
+  doubleDescription: {
+    color: "#7B641F",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 13,
+  },
+
+  doubleProgressBackground: {
+    height: 8,
+    borderRadius: 10,
+    backgroundColor: "#F0E0B4",
+    marginTop: 12,
+    overflow: "hidden",
+  },
+
+  doubleProgressFill: {
+    height: "100%",
+    borderRadius: 10,
+    backgroundColor: "#B7791F",
+  },
+
+  doubleMessage: {
+    color: "#8A6B20",
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 8,
   },
 
   instructions: {
