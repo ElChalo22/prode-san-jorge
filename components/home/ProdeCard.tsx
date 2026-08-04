@@ -1,36 +1,22 @@
-// CMP-002
-
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { lightColors, spacing } from "../../theme";
+import type { HomeProdeCard } from "../../types/home";
 import Card from "../common/Card";
 
 type Props = {
-  emoji: string;
-  title: string;
-  description: string;
-  jackpot: string;
-  players: number;
-  countdown: string;
+  game: HomeProdeCard;
   onPress: () => void;
 };
 
-export default function ProdeCard({
-  emoji,
-  title,
-  description,
-  jackpot,
-  players,
-  countdown,
-  onPress,
-}: Props) {
+export default function ProdeCard({ game, onPress }: Props) {
   return (
     <Pressable onPress={onPress}>
       <Card style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.title}>
-            {emoji} {title}
+            {game.emoji} {game.title}
           </Text>
 
           <Ionicons
@@ -41,22 +27,22 @@ export default function ProdeCard({
         </View>
 
         <Text style={styles.description}>
-          {description}
+          {game.description}
         </Text>
 
         <View style={styles.infoRow}>
           <Text style={styles.label}>💰 Pozo</Text>
-          <Text style={styles.value}>{jackpot}</Text>
+          <Text style={styles.value}>{game.jackpot}</Text>
         </View>
 
         <View style={styles.infoRow}>
           <Text style={styles.label}>👥 Jugadores</Text>
-          <Text style={styles.value}>{players}</Text>
+          <Text style={styles.value}>{game.players}</Text>
         </View>
 
         <View style={styles.infoRow}>
           <Text style={styles.label}>⏳ Cierra en</Text>
-          <Text style={styles.countdown}>{countdown}</Text>
+          <Text style={styles.countdown}>{game.countdown}</Text>
         </View>
       </Card>
     </Pressable>

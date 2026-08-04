@@ -1,26 +1,39 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { RefreshControl, SafeAreaView, ScrollView, StyleSheet } from "react-native";
+import { useEffect } from "react";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import HomeHeader from "../../components/home/HomeHeader";
 import HomeRanking from "../../components/home/HomeRanking";
 import HomeStats from "../../components/home/HomeStats";
 import ProdeCard from "../../components/home/ProdeCard";
 
-import { competitionGroups } from "../../services/prodeGroups";
+import { useProdeStore } from "../../store/prodeStore";
+import { lightColors } from "../../theme";
+import { toHomeProdeCard } from "../../utils/homeProdeCard";
 
 export default function HomeScreen() {
   const router = useRouter();
 
-  const [refreshing, setRefreshing] = useState(false);
+  const games = useProdeStore((state) => state.games);
+  const loading = useProdeStore((state) => state.loading);
+  const refreshing = useProdeStore((state) => state.refreshing);
+  const error = useProdeStore((state) => state.error);
+  const loadGames = useProdeStore((state) => state.loadGames);
+  const refreshGames = useProdeStore((state) => state.refreshGames);
 
-  const onRefresh = () => {
-    setRefreshing(true);
+  useEffect(() => {
+    loadGames();
+  }, [loadGames]);
 
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
-  };
+  const homeGames = games.map(toHomeProdeCard);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -30,26 +43,44 @@ export default function HomeScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={onRefresh}
+            onRefresh={refreshGames}
           />
         }
       >
         <HomeHeader username="Chalo" />
 
-        {competitionGroups.map((group) => (
+        {loading && (
+          <View style={styles.feedback}>
+            <ActivityIndicator size="large" />
+            <Text style={styles.feedbackText}>
+              Cargando prodes...
+            </Text>
+          </View>
+        )}
+
+        {!loading && error && (
+          <View style={styles.feedback}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
+        {!loading && !error && homeGames.length === 0 && (
+          <View style={styles.feedback}>
+            <Text style={styles.feedbackText}>
+              No hay prodes abiertos en este momento.
+            </Text>
+          </View>
+        )}
+
+        {homeGames.map((game) => (
           <ProdeCard
-            key={group.id}
-            emoji={group.title.split(" ")[0]}
-            title={group.title.replace(group.title.split(" ")[0] + " ", "")}
-            description={group.description}
-            jackpot="$0"
-            players={0}
-            countdown="--:--:--"
+            key={game.id}
+            game={game}
             onPress={() =>
               router.push({
                 pathname: "/pronosticos",
                 params: {
-                  group: group.id,
+                  gameId: game.id,
                 },
               })
             }
@@ -65,7 +96,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: {
+  container: {
     flex: 1,
     backgroundColor: "#F6F7F8",
   },
@@ -74,5 +105,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 120,
+  },
+
+  feedback: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 32,
+  },
+
+  feedbackText: {
+    marginTop: 12,
+    fontSize: 15,
+    textAlign: "center",
+    color: lightColors.text.secondary,
+  },
+
+  errorText: {
+    fontSize: 15,
+    textAlign: "center",
+    color: "#C62828",
   },
 });
