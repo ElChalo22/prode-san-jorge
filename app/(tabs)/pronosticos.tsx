@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   SafeAreaView,
@@ -14,71 +16,83 @@ import MatchCard, {
   isDoublePrediction,
   Prediction,
 } from "../../components/predictions/MatchCard";
-
-type Match = {
-  id: number;
-  local: string;
-  visitante: string;
-};
-
-const PARTIDOS: Match[] = [
-  {
-    id: 1,
-    local: "River Plate",
-    visitante: "Boca Juniors",
-  },
-  {
-    id: 2,
-    local: "Racing Club",
-    visitante: "Independiente",
-  },
-  {
-    id: 3,
-    local: "San Lorenzo",
-    visitante: "Huracán",
-  },
-  {
-    id: 4,
-    local: "Rosario Central",
-    visitante: "Newell's",
-  },
-];
-
-/*
-  Valor temporal para pruebas.
-
-  Más adelante vendrá desde Supabase y podrá ser modificado
-  fácilmente por el administrador para cada fecha.
-*/
-const MAX_DOBLES_POR_USUARIO = 2;
+import { usePredictionStore } from "../../store/predictionStore";
 
 export default function PronosticosScreen() {
+  const params = useLocalSearchParams<{
+    gameId?: string | string[];
+  }>();
+
+  const gameId = Array.isArray(params.gameId)
+    ? params.gameId[0]
+    : params.gameId;
+
+  const game = usePredictionStore((state) => state.game);
+  const loading = usePredictionStore((state) => state.loading);
+  const error = usePredictionStore((state) => state.error);
+  const loadGame = usePredictionStore((state) => state.loadGame);
+
+  /*
+    Valor temporal.
+
+    Más adelante se reemplazará por el valor configurado
+    por el administrador en Supabase.
+  */
+  const maxDoblesPorUsuario: number = Number(2);
+
   const [pronosticos, setPronosticos] = useState<
-    Record<number, Prediction>
+    Record<string, Prediction>
   >({});
+
+  useEffect(() => {
+    if (!gameId) {
+      return;
+    }
+
+    loadGame(gameId);
+  }, [gameId, loadGame]);
+
+  useEffect(() => {
+    setPronosticos({});
+  }, [gameId]);
+
+  const partidos = useMemo(() => {
+    if (!game) {
+      return [];
+    }
+
+    return game.matchdays
+      .flatMap((matchday) => matchday.matches ?? [])
+      .sort(
+        (primerPartido, segundoPartido) =>
+          new Date(primerPartido.kickoff_at).getTime() -
+          new Date(segundoPartido.kickoff_at).getTime(),
+      );
+  }, [game]);
 
   const completados = Object.keys(pronosticos).length;
 
   const doblesUsados = Object.values(pronosticos).filter(
-    isDoublePrediction
+    isDoublePrediction,
   ).length;
 
   const progreso =
-    PARTIDOS.length === 0
+    partidos.length === 0
       ? 0
-      : (completados / PARTIDOS.length) * 100;
+      : (completados / partidos.length) * 100;
 
   const progresoDobles =
-    MAX_DOBLES_POR_USUARIO === 0
+    maxDoblesPorUsuario === 0
       ? 0
-      : (doblesUsados / MAX_DOBLES_POR_USUARIO) * 100;
+      : (doblesUsados / maxDoblesPorUsuario) * 100;
 
   const limiteDoblesAlcanzado =
-    doblesUsados >= MAX_DOBLES_POR_USUARIO;
+    maxDoblesPorUsuario > 0 &&
+    doblesUsados >= maxDoblesPorUsuario;
 
   const seleccionarPronostico = (
-    partidoId: number,
-    opcion: Prediction
+    partidoId: string,
+    opcion: Prediction,
   ) => {
     setPronosticos((actuales) => ({
       ...actuales,
@@ -89,19 +103,24 @@ export default function PronosticosScreen() {
   const mostrarAvisoLimiteDobles = () => {
     Alert.alert(
       "Límite alcanzado",
-      `Solo podés usar doble oportunidad en ${
-        MAX_DOBLES_POR_USUARIO
-      } ${
-        MAX_DOBLES_POR_USUARIO === 1
-          ? "partido"
-          : "partidos"
-      } de esta fecha.`
+      `Solo podés usar doble oportunidad en ${maxDoblesPorUsuario} ${
+        maxDoblesPorUsuario === 1 ? "partido" : "partidos"
+      } de esta fecha.`,
     );
   };
 
   const guardarPronosticos = () => {
-    if (completados < PARTIDOS.length) {
-      const faltantes = PARTIDOS.length - completados;
+    if (partidos.length === 0) {
+      Alert.alert(
+        "Sin partidos",
+        "Todavía no hay partidos disponibles en este prode.",
+      );
+
+      return;
+    }
+
+    if (completados < partidos.length) {
+      const faltantes = partidos.length - completados;
 
       Alert.alert(
         "Faltan partidos",
@@ -109,19 +128,103 @@ export default function PronosticosScreen() {
           faltantes === 1 ? "falta" : "faltan"
         } completar ${faltantes} ${
           faltantes === 1 ? "pronóstico" : "pronósticos"
-        }.`
+        }.`,
       );
 
       return;
     }
 
-    console.log("Pronósticos guardados:", pronosticos);
+    console.log("Pronósticos preparados:", {
+      gameId,
+      pronosticos,
+    });
 
     Alert.alert(
-      "¡Pronósticos guardados!",
-      "Tus elecciones fueron registradas correctamente."
+      "¡Pronósticos preparados!",
+      "Tus elecciones están completas. En el próximo paso las guardaremos en Supabase.",
     );
   };
+
+  if (!gameId) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.feedback}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={42}
+            color="#C62828"
+          />
+
+          <Text style={styles.errorTitle}>
+            No se seleccionó ningún prode
+          </Text>
+
+          <Text style={styles.feedbackText}>
+            Ingresá desde el botón de un prode disponible en el
+            inicio.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loading && !game) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.feedback}>
+          <ActivityIndicator size="large" color="#18A558" />
+
+          <Text style={styles.feedbackText}>
+            Cargando partidos...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.feedback}>
+          <Ionicons
+            name="cloud-offline-outline"
+            size={42}
+            color="#C62828"
+          />
+
+          <Text style={styles.errorTitle}>
+            No pudimos cargar el prode
+          </Text>
+
+          <Text style={styles.feedbackText}>{error}</Text>
+
+          <Pressable
+            onPress={() => loadGame(gameId)}
+            style={({ pressed }) => [
+              styles.retryButton,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={styles.retryButtonText}>
+              Intentar nuevamente
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!game) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.feedback}>
+          <Text style={styles.feedbackText}>
+            No se encontró el prode seleccionado.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -131,9 +234,12 @@ export default function PronosticosScreen() {
       >
         <View style={styles.header}>
           <View style={styles.headerContent}>
-            <Text style={styles.fecha}>FECHA 1</Text>
+            <Text style={styles.fecha}>
+              {game.prode_group.name?.toUpperCase() ??
+                "PRODE SAN JORGE"}
+            </Text>
 
-            <Text style={styles.title}>Mis pronósticos</Text>
+            <Text style={styles.title}>{game.name}</Text>
 
             <Text style={styles.subtitle}>
               Elegí el resultado que creés que tendrá cada partido.
@@ -156,7 +262,7 @@ export default function PronosticosScreen() {
             </Text>
 
             <Text style={styles.progressValue}>
-              {completados}/{PARTIDOS.length}
+              {completados}/{partidos.length}
             </Text>
           </View>
 
@@ -165,20 +271,21 @@ export default function PronosticosScreen() {
               style={[
                 styles.progressFill,
                 {
-                  width: `${progreso}%`,
+                  width: `${Math.min(progreso, 100)}%`,
                 },
               ]}
             />
           </View>
 
           <Text style={styles.progressMessage}>
-            {completados === PARTIDOS.length
+            {partidos.length > 0 &&
+            completados === partidos.length
               ? "¡Completaste todos los partidos!"
               : "Completá la fecha para poder guardar."}
           </Text>
         </View>
 
-        {MAX_DOBLES_POR_USUARIO > 0 && (
+        {maxDoblesPorUsuario > 0 && (
           <View style={styles.doubleCard}>
             <View style={styles.doubleHeader}>
               <View style={styles.doubleTitleContainer}>
@@ -202,14 +309,14 @@ export default function PronosticosScreen() {
               </View>
 
               <Text style={styles.doubleCounter}>
-                {doblesUsados}/{MAX_DOBLES_POR_USUARIO}
+                {doblesUsados}/{maxDoblesPorUsuario}
               </Text>
             </View>
 
             <Text style={styles.doubleDescription}>
               Podés elegir dos posibles resultados en hasta{" "}
-              {MAX_DOBLES_POR_USUARIO}{" "}
-              {MAX_DOBLES_POR_USUARIO === 1
+              {maxDoblesPorUsuario}{" "}
+              {maxDoblesPorUsuario === 1
                 ? "partido"
                 : "partidos"}{" "}
               de esta fecha.
@@ -222,7 +329,7 @@ export default function PronosticosScreen() {
                   {
                     width: `${Math.min(
                       progresoDobles,
-                      100
+                      100,
                     )}%`,
                   },
                 ]}
@@ -233,11 +340,9 @@ export default function PronosticosScreen() {
               {limiteDoblesAlcanzado
                 ? "Ya utilizaste todos los dobles disponibles."
                 : `Todavía podés usar ${
-                    MAX_DOBLES_POR_USUARIO - doblesUsados
+                    maxDoblesPorUsuario - doblesUsados
                   } ${
-                    MAX_DOBLES_POR_USUARIO -
-                      doblesUsados ===
-                    1
+                    maxDoblesPorUsuario - doblesUsados === 1
                       ? "doble"
                       : "dobles"
                   }.`}
@@ -257,44 +362,67 @@ export default function PronosticosScreen() {
           </Text>
         </View>
 
-        {PARTIDOS.map((partido, index) => (
+        {partidos.length === 0 && (
+          <View style={styles.emptyCard}>
+            <Ionicons
+              name="calendar-outline"
+              size={32}
+              color="#777777"
+            />
+
+            <Text style={styles.emptyTitle}>
+              Todavía no hay partidos
+            </Text>
+
+            <Text style={styles.emptyText}>
+              Los partidos aparecerán cuando el administrador
+              cargue esta fecha.
+            </Text>
+          </View>
+        )}
+
+        {partidos.map((partido, index) => (
           <MatchCard
             key={partido.id}
             number={index + 1}
-            local={partido.local}
-            visitante={partido.visitante}
+            local={partido.home_team.name}
+            visitante={partido.away_team.name}
             selected={pronosticos[partido.id]}
             onSelect={(opcion) =>
               seleccionarPronostico(partido.id, opcion)
             }
-            showDoubleOptions={MAX_DOBLES_POR_USUARIO > 0}
+            showDoubleOptions={maxDoblesPorUsuario > 0}
             doubleLimitReached={limiteDoblesAlcanzado}
             onDoubleLimitReached={mostrarAvisoLimiteDobles}
           />
         ))}
 
-        <Pressable
-          onPress={guardarPronosticos}
-          style={({ pressed }) => [
-            styles.saveButton,
-            pressed && styles.saveButtonPressed,
-          ]}
-        >
-          <Ionicons
-            name="save-outline"
-            size={21}
-            color="#FFFFFF"
-          />
+        {partidos.length > 0 && (
+          <>
+            <Pressable
+              onPress={guardarPronosticos}
+              style={({ pressed }) => [
+                styles.saveButton,
+                pressed && styles.buttonPressed,
+              ]}
+            >
+              <Ionicons
+                name="save-outline"
+                size={21}
+                color="#FFFFFF"
+              />
 
-          <Text style={styles.saveButtonText}>
-            Guardar pronósticos
-          </Text>
-        </Pressable>
+              <Text style={styles.saveButtonText}>
+                Guardar pronósticos
+              </Text>
+            </Pressable>
 
-        <Text style={styles.bottomMessage}>
-          Podrás modificar tus elecciones hasta el cierre de la
-          fecha.
-        </Text>
+            <Text style={styles.bottomMessage}>
+              Podrás modificar tus elecciones hasta el cierre de
+              la fecha.
+            </Text>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -310,6 +438,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 20,
     paddingBottom: 120,
+  },
+
+  feedback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+
+  feedbackText: {
+    color: "#777777",
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    marginTop: 10,
+  },
+
+  errorTitle: {
+    color: "#111111",
+    fontSize: 18,
+    fontWeight: "800",
+    textAlign: "center",
+    marginTop: 12,
+  },
+
+  retryButton: {
+    backgroundColor: "#18A558",
+    borderRadius: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    marginTop: 20,
+  },
+
+  retryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
   },
 
   header: {
@@ -497,6 +662,31 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  emptyCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    padding: 26,
+  },
+
+  emptyTitle: {
+    color: "#111111",
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 10,
+  },
+
+  emptyText: {
+    color: "#777777",
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: 6,
+  },
+
   saveButton: {
     height: 57,
     borderRadius: 17,
@@ -508,7 +698,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  saveButtonPressed: {
+  buttonPressed: {
     transform: [{ scale: 0.98 }],
     opacity: 0.8,
   },
