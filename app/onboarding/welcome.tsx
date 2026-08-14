@@ -1,10 +1,11 @@
 import { Button } from "@/components";
-import AnimatedShield from "@/components/AnimatedShield";
+import { supabase } from "@/lib/supabase";
 import { router } from "expo-router";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
+  Image,
   StyleSheet,
   Text,
   View,
@@ -12,18 +13,11 @@ import {
 
 const { width, height } = Dimensions.get("window");
 
-const CLUBS = [
-  { name: "CARP", symbol: "R" },
-  { name: "CABJ", symbol: "B" },
-  { name: "RACING", symbol: "R" },
-  { name: "CASLA", symbol: "SL" },
-  { name: "CAI", symbol: "I" },
-  { name: "NOB", symbol: "N" },
-  { name: "TALLERES", symbol: "T" },
-  { name: "HURACÁN", symbol: "H" },
-  { name: "VÉLEZ", symbol: "V" },
-  { name: "AAAJ", symbol: "A" },
-];
+type WelcomeTeam = {
+  id: string;
+  name: string;
+  logo_url: string;
+};
 
 const SHIELD_POSITIONS = [
   {
@@ -81,7 +75,7 @@ function shuffle<T>(items: T[]) {
 }
 
 export default function WelcomeScreen() {
-  const selectedClubs = useMemo(() => shuffle(CLUBS).slice(0, 8), []);
+  const [teams, setTeams] = useState<WelcomeTeam[]>([]);
 
   const shieldsOpacity = useRef(new Animated.Value(0)).current;
   const shieldsScale = useRef(new Animated.Value(0.8)).current;
@@ -91,6 +85,44 @@ export default function WelcomeScreen() {
 
   const buttonOpacity = useRef(new Animated.Value(0)).current;
   const buttonTranslate = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    const loadTeams = async () => {
+      const { data, error } = await supabase
+        .from("teams")
+        .select("id, name, logo_url")
+        .not("logo_url", "is", null)
+        .eq("active", true)
+        .limit(40);
+
+      if (error) {
+        console.error(
+          "No se pudieron cargar los escudos del welcome:",
+          error,
+        );
+        return;
+      }
+
+      const validTeams = (data ?? []).filter(
+        (
+          team,
+        ): team is {
+          id: string;
+          name: string;
+          logo_url: string;
+        } => Boolean(team.logo_url),
+      );
+
+      setTeams(shuffle(validTeams).slice(0, 8));
+    };
+
+    loadTeams();
+  }, []);
+
+  const selectedTeams = useMemo(
+    () => teams.slice(0, SHIELD_POSITIONS.length),
+    [teams],
+  );
 
   useEffect(() => {
     const animation = Animated.sequence([
@@ -172,20 +204,34 @@ export default function WelcomeScreen() {
           },
         ]}
       >
-        {selectedClubs.map((club, index) => {
+        {selectedTeams.map((team, index) => {
           const position = SHIELD_POSITIONS[index];
 
+          if (!position) {
+            return null;
+          }
+
           return (
-            <AnimatedShield
-              key={`${club.name}-${index}`}
-              name={club.name}
-              symbol={club.symbol}
-              left={position.left}
-              top={position.top}
-              rotation={position.rotation}
-              scale={position.scale}
-              delay={index * 120}
-            />
+            <View
+              key={team.id}
+              style={[
+                styles.shieldPosition,
+                {
+                  left: position.left,
+                  top: position.top,
+                  transform: [
+                    { rotate: position.rotation },
+                    { scale: position.scale },
+                  ],
+                },
+              ]}
+            >
+              <Image
+                source={{ uri: team.logo_url }}
+                style={styles.teamLogo}
+                resizeMode="contain"
+              />
+            </View>
           );
         })}
       </Animated.View>
@@ -246,6 +292,19 @@ const styles = StyleSheet.create({
 
   shieldsLayer: {
     ...StyleSheet.absoluteFillObject,
+  },
+
+  shieldPosition: {
+    position: "absolute",
+    width: 86,
+    height: 86,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  teamLogo: {
+    width: 76,
+    height: 76,
   },
 
   logoContainer: {

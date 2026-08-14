@@ -1,34 +1,113 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-export type Prediction = "1" | "X" | "2" | "1X" | "X2";
+export type Prediction =
+  | "1"
+  | "X"
+  | "2"
+  | "1X"
+  | "X2";
 
 type MatchCardProps = {
-  number: number;
+  kickoffAt: string;
+
   local: string;
+  localLogo?: string | null;
+
   visitante: string;
+  visitanteLogo?: string | null;
+
   selected?: Prediction;
   onSelect: (prediction: Prediction) => void;
+
   showDoubleOptions?: boolean;
   doubleLimitReached?: boolean;
   onDoubleLimitReached?: () => void;
 };
 
 export const isDoublePrediction = (
-  prediction?: Prediction
-) => prediction === "1X" || prediction === "X2";
+  prediction?: Prediction,
+) => {
+  return prediction === "1X" || prediction === "X2";
+};
+
+function formatKickoff(
+  kickoffAt: string,
+): string {
+  const date = new Date(kickoffAt);
+
+  const weekday = new Intl.DateTimeFormat(
+    "es-AR",
+    {
+      timeZone:
+        "America/Argentina/Buenos_Aires",
+      weekday: "short",
+    },
+  )
+    .format(date)
+    .replace(".", "")
+    .toUpperCase();
+
+  const day = new Intl.DateTimeFormat(
+    "es-AR",
+    {
+      timeZone:
+        "America/Argentina/Buenos_Aires",
+      day: "2-digit",
+    },
+  ).format(date);
+
+  const month = new Intl.DateTimeFormat(
+    "es-AR",
+    {
+      timeZone:
+        "America/Argentina/Buenos_Aires",
+      month: "short",
+    },
+  )
+    .format(date)
+    .replace(".", "")
+    .toUpperCase();
+
+  const time = new Intl.DateTimeFormat(
+    "es-AR",
+    {
+      timeZone:
+        "America/Argentina/Buenos_Aires",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    },
+  ).format(date);
+
+  return `${weekday} ${day} ${month} · ${time}`;
+}
 
 export default function MatchCard({
-  number,
+  kickoffAt,
+
   local,
+  localLogo,
+
   visitante,
+  visitanteLogo,
+
   selected,
   onSelect,
+
   showDoubleOptions = false,
   doubleLimitReached = false,
   onDoubleLimitReached,
 }: MatchCardProps) {
-  const seleccionar = (prediction: Prediction) => {
+  const seleccionar = (
+    prediction: Prediction,
+  ) => {
     const seleccionActualEsDoble =
       isDoublePrediction(selected);
 
@@ -48,20 +127,29 @@ export default function MatchCard({
   };
 
   const dobleDeshabilitado =
-    doubleLimitReached && !isDoublePrediction(selected);
+    doubleLimitReached &&
+    !isDoublePrediction(selected);
 
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.matchNumber}>
-          PARTIDO {number}
-        </Text>
+        <View style={styles.dateRow}>
+          <Ionicons
+            name="calendar-outline"
+            size={12}
+            color="#16874A"
+          />
+
+          <Text style={styles.kickoff}>
+            {formatKickoff(kickoffAt)}
+          </Text>
+        </View>
 
         {isDoublePrediction(selected) && (
           <View style={styles.doubleBadge}>
             <Ionicons
               name="shield-checkmark"
-              size={12}
+              size={10}
               color="#9A6513"
             />
 
@@ -77,30 +165,45 @@ export default function MatchCard({
           onPress={() => seleccionar("1")}
           style={({ pressed }) => [
             styles.teamButton,
-            selected === "1" && styles.simpleSelected,
+            selected === "1" &&
+              styles.simpleSelected,
             pressed && styles.pressed,
           ]}
         >
           <View
             style={[
               styles.shield,
-              selected === "1" && styles.shieldSelected,
+              selected === "1" &&
+                styles.shieldSelected,
             ]}
           >
-            <Ionicons
-              name="shield-outline"
-              size={25}
-              color={
-                selected === "1" ? "#FFFFFF" : "#111111"
-              }
-            />
+            {localLogo ? (
+              <Image
+                source={{
+                  uri: localLogo,
+                }}
+                style={styles.teamLogo}
+                resizeMode="contain"
+              />
+            ) : (
+              <Ionicons
+                name="shield-outline"
+                size={22}
+                color={
+                  selected === "1"
+                    ? "#FFFFFF"
+                    : "#111111"
+                }
+              />
+            )}
           </View>
 
           <Text
             numberOfLines={2}
             style={[
               styles.teamName,
-              selected === "1" && styles.selectedText,
+              selected === "1" &&
+                styles.selectedText,
             ]}
           >
             {local}
@@ -109,7 +212,8 @@ export default function MatchCard({
           <Text
             style={[
               styles.teamResult,
-              selected === "1" && styles.selectedText,
+              selected === "1" &&
+                styles.selectedText,
             ]}
           >
             Gana
@@ -120,14 +224,16 @@ export default function MatchCard({
           onPress={() => seleccionar("X")}
           style={({ pressed }) => [
             styles.drawButton,
-            selected === "X" && styles.simpleSelected,
+            selected === "X" &&
+              styles.simpleSelected,
             pressed && styles.pressed,
           ]}
         >
           <Text
             style={[
               styles.drawSymbol,
-              selected === "X" && styles.selectedText,
+              selected === "X" &&
+                styles.selectedText,
             ]}
           >
             X
@@ -136,7 +242,8 @@ export default function MatchCard({
           <Text
             style={[
               styles.drawText,
-              selected === "X" && styles.selectedText,
+              selected === "X" &&
+                styles.selectedText,
             ]}
           >
             Empate
@@ -147,30 +254,45 @@ export default function MatchCard({
           onPress={() => seleccionar("2")}
           style={({ pressed }) => [
             styles.teamButton,
-            selected === "2" && styles.simpleSelected,
+            selected === "2" &&
+              styles.simpleSelected,
             pressed && styles.pressed,
           ]}
         >
           <View
             style={[
               styles.shield,
-              selected === "2" && styles.shieldSelected,
+              selected === "2" &&
+                styles.shieldSelected,
             ]}
           >
-            <Ionicons
-              name="shield-outline"
-              size={25}
-              color={
-                selected === "2" ? "#FFFFFF" : "#111111"
-              }
-            />
+            {visitanteLogo ? (
+              <Image
+                source={{
+                  uri: visitanteLogo,
+                }}
+                style={styles.teamLogo}
+                resizeMode="contain"
+              />
+            ) : (
+              <Ionicons
+                name="shield-outline"
+                size={22}
+                color={
+                  selected === "2"
+                    ? "#FFFFFF"
+                    : "#111111"
+                }
+              />
+            )}
           </View>
 
           <Text
             numberOfLines={2}
             style={[
               styles.teamName,
-              selected === "2" && styles.selectedText,
+              selected === "2" &&
+                styles.selectedText,
             ]}
           >
             {visitante}
@@ -179,7 +301,8 @@ export default function MatchCard({
           <Text
             style={[
               styles.teamResult,
-              selected === "2" && styles.selectedText,
+              selected === "2" &&
+                styles.selectedText,
             ]}
           >
             Gana
@@ -192,7 +315,7 @@ export default function MatchCard({
           <View style={styles.doubleTitleRow}>
             <Ionicons
               name="shield-checkmark-outline"
-              size={15}
+              size={13}
               color="#9A6513"
             />
 
@@ -204,29 +327,47 @@ export default function MatchCard({
           <View style={styles.doubleOptions}>
             <Pressable
               disabled={dobleDeshabilitado}
-              onPress={() => seleccionar("1X")}
+              onPress={() =>
+                seleccionar("1X")
+              }
               style={({ pressed }) => [
                 styles.doubleButton,
+
                 selected === "1X" &&
                   styles.doubleSelected,
+
                 dobleDeshabilitado &&
                   styles.doubleDisabled,
+
                 pressed &&
                   !dobleDeshabilitado &&
                   styles.pressed,
               ]}
             >
-              <Ionicons
-                name="shield-outline"
-                size={16}
-                color={
-                  selected === "1X"
-                    ? "#FFFFFF"
-                    : "#8A5A12"
-                }
-              />
+              {localLogo ? (
+                <Image
+                  source={{
+                    uri: localLogo,
+                  }}
+                  style={
+                    styles.doubleTeamLogo
+                  }
+                  resizeMode="contain"
+                />
+              ) : (
+                <Ionicons
+                  name="shield-outline"
+                  size={14}
+                  color={
+                    selected === "1X"
+                      ? "#FFFFFF"
+                      : "#8A5A12"
+                  }
+                />
+              )}
 
               <Text
+                numberOfLines={1}
                 style={[
                   styles.doubleButtonText,
                   selected === "1X" &&
@@ -239,29 +380,47 @@ export default function MatchCard({
 
             <Pressable
               disabled={dobleDeshabilitado}
-              onPress={() => seleccionar("X2")}
+              onPress={() =>
+                seleccionar("X2")
+              }
               style={({ pressed }) => [
                 styles.doubleButton,
+
                 selected === "X2" &&
                   styles.doubleSelected,
+
                 dobleDeshabilitado &&
                   styles.doubleDisabled,
+
                 pressed &&
                   !dobleDeshabilitado &&
                   styles.pressed,
               ]}
             >
-              <Ionicons
-                name="shield-outline"
-                size={16}
-                color={
-                  selected === "X2"
-                    ? "#FFFFFF"
-                    : "#8A5A12"
-                }
-              />
+              {visitanteLogo ? (
+                <Image
+                  source={{
+                    uri: visitanteLogo,
+                  }}
+                  style={
+                    styles.doubleTeamLogo
+                  }
+                  resizeMode="contain"
+                />
+              ) : (
+                <Ionicons
+                  name="shield-outline"
+                  size={14}
+                  color={
+                    selected === "X2"
+                      ? "#FFFFFF"
+                      : "#8A5A12"
+                  }
+                />
+              )}
 
               <Text
+                numberOfLines={1}
                 style={[
                   styles.doubleButtonText,
                   selected === "X2" &&
@@ -281,73 +440,106 @@ export default function MatchCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 12,
+    borderRadius: 16,
+
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 11,
+
+    marginBottom: 9,
+
     borderWidth: 1,
     borderColor: "#E8E8E8",
+
     shadowColor: "#000000",
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
+    shadowOpacity: 0.025,
+    shadowRadius: 6,
+
     shadowOffset: {
       width: 0,
-      height: 3,
+      height: 2,
     },
-    elevation: 2,
+
+    elevation: 1,
   },
 
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+
+    marginBottom: 7,
   },
 
-  matchNumber: {
-    color: "#777777",
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    gap: 5,
+  },
+
+  kickoff: {
+    color: "#16874A",
+
     fontSize: 9,
     fontWeight: "800",
-    letterSpacing: 0.7,
+
+    letterSpacing: 0.3,
   },
 
   doubleBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+
+    gap: 3,
+
     backgroundColor: "#FFF0C7",
+
     borderRadius: 20,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
+
+    paddingHorizontal: 6,
+    paddingVertical: 3,
   },
 
   doubleBadgeText: {
     color: "#9A6513",
-    fontSize: 8,
+
+    fontSize: 7,
     fontWeight: "900",
   },
 
   predictionRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 8,
+
+    gap: 6,
   },
 
   teamButton: {
     flex: 1,
-    minHeight: 100,
-    borderRadius: 14,
+
+    minHeight: 88,
+
+    borderRadius: 12,
+
     backgroundColor: "#F3F4F5",
+
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 6,
-    paddingVertical: 9,
+
+    paddingHorizontal: 5,
+    paddingVertical: 6,
   },
 
   drawButton: {
-    width: 68,
-    minHeight: 100,
-    borderRadius: 14,
+    width: 58,
+
+    minHeight: 88,
+
+    borderRadius: 12,
+
     backgroundColor: "#F3F4F5",
+
     alignItems: "center",
     justifyContent: "center",
   },
@@ -357,46 +549,67 @@ const styles = StyleSheet.create({
   },
 
   shield: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 39,
+    height: 39,
+
+    borderRadius: 20,
+
     backgroundColor: "#FFFFFF",
+
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 5,
+
+    marginBottom: 4,
+
+    padding: 3,
   },
 
   shieldSelected: {
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor:
+      "rgba(255,255,255,0.92)",
+  },
+
+  teamLogo: {
+    width: 33,
+    height: 33,
   },
 
   teamName: {
     color: "#111111",
-    fontSize: 11,
-    lineHeight: 14,
+
+    fontSize: 10,
+    lineHeight: 12,
+
     fontWeight: "800",
+
     textAlign: "center",
-    minHeight: 28,
+
+    minHeight: 23,
   },
 
   teamResult: {
     color: "#777777",
-    fontSize: 9,
+
+    fontSize: 8,
     fontWeight: "700",
-    marginTop: 2,
+
+    marginTop: 1,
   },
 
   drawSymbol: {
     color: "#111111",
-    fontSize: 22,
+
+    fontSize: 20,
     fontWeight: "900",
   },
 
   drawText: {
     color: "#777777",
-    fontSize: 9,
+
+    fontSize: 8,
     fontWeight: "700",
-    marginTop: 3,
+
+    marginTop: 2,
   },
 
   selectedText: {
@@ -406,41 +619,53 @@ const styles = StyleSheet.create({
   doubleSection: {
     borderTopWidth: 1,
     borderTopColor: "#EEEEEE",
-    marginTop: 11,
-    paddingTop: 10,
+
+    marginTop: 8,
+    paddingTop: 7,
   },
 
   doubleTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    marginBottom: 8,
+
+    gap: 4,
+
+    marginBottom: 6,
   },
 
   doubleTitle: {
     color: "#8A5A12",
-    fontSize: 10,
+
+    fontSize: 9,
     fontWeight: "800",
   },
 
   doubleOptions: {
     flexDirection: "row",
-    gap: 7,
+
+    gap: 6,
   },
 
   doubleButton: {
     flex: 1,
-    minHeight: 44,
-    borderRadius: 11,
+
+    height: 37,
+
+    borderRadius: 10,
+
     backgroundColor: "#FFF8E8",
+
     borderWidth: 1,
     borderColor: "#EED89D",
+
     flexDirection: "row",
+
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingHorizontal: 7,
-    paddingVertical: 6,
+
+    gap: 4,
+
+    paddingHorizontal: 6,
   },
 
   doubleSelected: {
@@ -452,17 +677,31 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
 
+  doubleTeamLogo: {
+    width: 18,
+    height: 18,
+  },
+
   doubleButtonText: {
     flex: 1,
+
     color: "#805B17",
-    fontSize: 9,
-    lineHeight: 12,
+
+    fontSize: 8,
+    lineHeight: 10,
+
     fontWeight: "700",
+
     textAlign: "center",
   },
 
   pressed: {
-    transform: [{ scale: 0.97 }],
+    transform: [
+      {
+        scale: 0.97,
+      },
+    ],
+
     opacity: 0.82,
   },
 });

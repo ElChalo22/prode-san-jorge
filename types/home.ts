@@ -1,3 +1,9 @@
+export interface HomeProdeTeamLogo {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+}
+
 export interface HomeProdeCard {
   id: string;
   emoji: string;
@@ -8,4 +14,6 @@ export interface HomeProdeCard {
   countdown: string;
   closesAt: string;
   status: "open" | "closed";
+
+  teams: HomeProdeTeamLogo[];
 }

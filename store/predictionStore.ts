@@ -15,6 +15,7 @@ interface SaveGamePredictionsInput {
   predictions: {
     matchId: string;
     prediction: PredictionValue;
+    secondaryPrediction?: PredictionValue | null;
   }[];
 }
 

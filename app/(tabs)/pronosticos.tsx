@@ -13,10 +13,19 @@ import {
 } from "react-native";
 
 import MatchCard, {
-  isDoublePrediction,
   Prediction,
 } from "../../components/predictions/MatchCard";
+
+import type { PredictionValue } from "../../database/types";
+
+import { supabase } from "../../lib/supabase";
 import { usePredictionStore } from "../../store/predictionStore";
+
+const esPronosticoDoble = (
+  prediction?: Prediction,
+): boolean => {
+  return prediction === "1X" || prediction === "X2";
+};
 
 export default function PronosticosScreen() {
   const params = useLocalSearchParams<{
@@ -29,16 +38,19 @@ export default function PronosticosScreen() {
 
   const game = usePredictionStore((state) => state.game);
   const loading = usePredictionStore((state) => state.loading);
+  const saving = usePredictionStore((state) => state.saving);
   const error = usePredictionStore((state) => state.error);
-  const loadGame = usePredictionStore((state) => state.loadGame);
 
-  /*
-    Valor temporal.
+  const loadGame = usePredictionStore(
+    (state) => state.loadGame,
+  );
 
-    Más adelante se reemplazará por el valor configurado
-    por el administrador en Supabase.
-  */
-  const maxDoblesPorUsuario: number = Number(2);
+  const submitPredictions = usePredictionStore(
+    (state) => state.submitPredictions,
+  );
+
+  const maxDoblesPorUsuario =
+    game?.double_chance_limit ?? 2;
 
   const [pronosticos, setPronosticos] = useState<
     Record<string, Prediction>
@@ -73,7 +85,7 @@ export default function PronosticosScreen() {
   const completados = Object.keys(pronosticos).length;
 
   const doblesUsados = Object.values(pronosticos).filter(
-    isDoublePrediction,
+    (pronostico) => esPronosticoDoble(pronostico),
   ).length;
 
   const progreso =
@@ -109,7 +121,59 @@ export default function PronosticosScreen() {
     );
   };
 
-  const guardarPronosticos = () => {
+  const convertirPronostico = (
+    prediction: Prediction,
+  ): {
+    prediction: PredictionValue;
+    secondaryPrediction: PredictionValue | null;
+  } => {
+    switch (prediction) {
+      case "1":
+        return {
+          prediction: "1",
+          secondaryPrediction: null,
+        };
+
+      case "X":
+        return {
+          prediction: "X",
+          secondaryPrediction: null,
+        };
+
+      case "2":
+        return {
+          prediction: "2",
+          secondaryPrediction: null,
+        };
+
+      case "1X":
+        return {
+          prediction: "1",
+          secondaryPrediction: "X",
+        };
+
+      case "X2":
+        return {
+          prediction: "X",
+          secondaryPrediction: "2",
+        };
+    }
+  };
+
+  const guardarPronosticos = async () => {
+    if (saving) {
+      return;
+    }
+
+    if (!gameId) {
+      Alert.alert(
+        "Prode no disponible",
+        "No pudimos identificar el prode seleccionado.",
+      );
+
+      return;
+    }
+
     if (partidos.length === 0) {
       Alert.alert(
         "Sin partidos",
@@ -134,15 +198,92 @@ export default function PronosticosScreen() {
       return;
     }
 
-    console.log("Pronósticos preparados:", {
-      gameId,
-      pronosticos,
-    });
+    if (doblesUsados > maxDoblesPorUsuario) {
+      Alert.alert(
+        "Demasiados dobles",
+        `Solo podés utilizar ${maxDoblesPorUsuario} ${
+          maxDoblesPorUsuario === 1 ? "doble" : "dobles"
+        } en esta fecha.`,
+      );
 
-    Alert.alert(
-      "¡Pronósticos preparados!",
-      "Tus elecciones están completas. En el próximo paso las guardaremos en Supabase.",
-    );
+      return;
+    }
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error(
+          "Error obteniendo usuario:",
+          userError,
+        );
+
+        Alert.alert(
+          "Error de sesión",
+          "No pudimos comprobar tu usuario. Intentá nuevamente.",
+        );
+
+        return;
+      }
+
+      if (!user) {
+        Alert.alert(
+          "Sesión requerida",
+          "Necesitás iniciar sesión antes de guardar tus pronósticos.",
+        );
+
+        return;
+      }
+
+      const predictions = partidos.map((partido) => {
+        const seleccion = pronosticos[partido.id];
+
+        const {
+          prediction,
+          secondaryPrediction,
+        } = convertirPronostico(seleccion);
+
+        return {
+          matchId: partido.id,
+          prediction,
+          secondaryPrediction,
+        };
+      });
+
+      const participation =
+        await submitPredictions({
+          prodeGameId: gameId,
+          userId: user.id,
+          predictions,
+        });
+
+      if (!participation) {
+        Alert.alert(
+          "No se pudo guardar",
+          "Ocurrió un problema guardando tus pronósticos. Intentá nuevamente.",
+        );
+
+        return;
+      }
+
+      Alert.alert(
+        "¡Pronósticos guardados!",
+        "Tus elecciones quedaron guardadas correctamente. Podrás modificarlas hasta el cierre de la fecha.",
+      );
+    } catch (saveError) {
+      console.error(
+        "Error preparando los pronósticos:",
+        saveError,
+      );
+
+      Alert.alert(
+        "No se pudo guardar",
+        "Ocurrió un problema guardando tus pronósticos. Intentá nuevamente.",
+      );
+    }
   };
 
   if (!gameId) {
@@ -172,7 +313,10 @@ export default function PronosticosScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.feedback}>
-          <ActivityIndicator size="large" color="#18A558" />
+          <ActivityIndicator
+            size="large"
+            color="#18A558"
+          />
 
           <Text style={styles.feedbackText}>
             Cargando partidos...
@@ -196,7 +340,9 @@ export default function PronosticosScreen() {
             No pudimos cargar el prode
           </Text>
 
-          <Text style={styles.feedbackText}>{error}</Text>
+          <Text style={styles.feedbackText}>
+            {error}
+          </Text>
 
           <Pressable
             onPress={() => loadGame(gameId)}
@@ -239,10 +385,13 @@ export default function PronosticosScreen() {
                 "PRODE SAN JORGE"}
             </Text>
 
-            <Text style={styles.title}>{game.name}</Text>
+            <Text style={styles.title}>
+              {game.name}
+            </Text>
 
             <Text style={styles.subtitle}>
-              Elegí el resultado que creés que tendrá cada partido.
+              Elegí el resultado que creés que tendrá cada
+              partido.
             </Text>
           </View>
 
@@ -271,7 +420,10 @@ export default function PronosticosScreen() {
               style={[
                 styles.progressFill,
                 {
-                  width: `${Math.min(progreso, 100)}%`,
+                  width: `${Math.min(
+                    progreso,
+                    100,
+                  )}%`,
                 },
               ]}
             />
@@ -322,7 +474,9 @@ export default function PronosticosScreen() {
               de esta fecha.
             </Text>
 
-            <View style={styles.doubleProgressBackground}>
+            <View
+              style={styles.doubleProgressBackground}
+            >
               <View
                 style={[
                   styles.doubleProgressFill,
@@ -340,9 +494,12 @@ export default function PronosticosScreen() {
               {limiteDoblesAlcanzado
                 ? "Ya utilizaste todos los dobles disponibles."
                 : `Todavía podés usar ${
-                    maxDoblesPorUsuario - doblesUsados
+                    maxDoblesPorUsuario -
+                    doblesUsados
                   } ${
-                    maxDoblesPorUsuario - doblesUsados === 1
+                    maxDoblesPorUsuario -
+                      doblesUsados ===
+                    1
                       ? "doble"
                       : "dobles"
                   }.`}
@@ -381,45 +538,69 @@ export default function PronosticosScreen() {
           </View>
         )}
 
-        {partidos.map((partido, index) => (
+        {partidos.map((partido) => (
           <MatchCard
             key={partido.id}
-            number={index + 1}
+            kickoffAt={partido.kickoff_at}
             local={partido.home_team.name}
+            localLogo={partido.home_team.logo_url}
             visitante={partido.away_team.name}
+            visitanteLogo={partido.away_team.logo_url}
             selected={pronosticos[partido.id]}
             onSelect={(opcion) =>
-              seleccionarPronostico(partido.id, opcion)
+              seleccionarPronostico(
+                partido.id,
+                opcion,
+              )
             }
-            showDoubleOptions={maxDoblesPorUsuario > 0}
-            doubleLimitReached={limiteDoblesAlcanzado}
-            onDoubleLimitReached={mostrarAvisoLimiteDobles}
+            showDoubleOptions={
+              maxDoblesPorUsuario > 0
+            }
+            doubleLimitReached={
+              limiteDoblesAlcanzado
+            }
+            onDoubleLimitReached={
+              mostrarAvisoLimiteDobles
+            }
           />
         ))}
 
         {partidos.length > 0 && (
           <>
             <Pressable
+              disabled={saving}
               onPress={guardarPronosticos}
               style={({ pressed }) => [
                 styles.saveButton,
-                pressed && styles.buttonPressed,
+                saving && styles.saveButtonDisabled,
+                pressed &&
+                  !saving &&
+                  styles.buttonPressed,
               ]}
             >
-              <Ionicons
-                name="save-outline"
-                size={21}
-                color="#FFFFFF"
-              />
+              {saving ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#FFFFFF"
+                />
+              ) : (
+                <Ionicons
+                  name="save-outline"
+                  size={21}
+                  color="#FFFFFF"
+                />
+              )}
 
               <Text style={styles.saveButtonText}>
-                Guardar pronósticos
+                {saving
+                  ? "Guardando..."
+                  : "Guardar pronósticos"}
               </Text>
             </Pressable>
 
             <Text style={styles.bottomMessage}>
-              Podrás modificar tus elecciones hasta el cierre de
-              la fecha.
+              Podrás modificar tus elecciones hasta el
+              cierre de la fecha.
             </Text>
           </>
         )}
@@ -696,6 +877,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 9,
     marginTop: 8,
+  },
+
+  saveButtonDisabled: {
+    opacity: 0.65,
   },
 
   buttonPressed: {
