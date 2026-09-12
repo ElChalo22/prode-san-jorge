@@ -19,7 +19,10 @@ import MatchCard, {
 import type { PredictionValue } from "../../database/types";
 
 import { supabase } from "../../lib/supabase";
-import { usePredictionStore } from "../../store/predictionStore";
+import {
+  subscribeToLiveMatches,
+  usePredictionStore,
+} from "../../store/predictionStore";
 
 const esPronosticoDoble = (
   prediction?: Prediction,
@@ -63,6 +66,18 @@ export default function PronosticosScreen() {
 
     loadGame(gameId);
   }, [gameId, loadGame]);
+
+  useEffect(() => {
+    if (!gameId) {
+      return;
+    }
+
+    const unsubscribe = subscribeToLiveMatches();
+
+    return () => {
+      unsubscribe();
+    };
+  }, [gameId]);
 
   useEffect(() => {
     setPronosticos({});
@@ -546,6 +561,7 @@ export default function PronosticosScreen() {
             localLogo={partido.home_team.logo_url}
             visitante={partido.away_team.name}
             visitanteLogo={partido.away_team.logo_url}
+            providerId={partido.provider_id}
             selected={pronosticos[partido.id]}
             onSelect={(opcion) =>
               seleccionarPronostico(

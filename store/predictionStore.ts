@@ -1,11 +1,14 @@
 import { create } from "zustand";
 
 import type {
+  Match,
   Participation,
   PredictionValue,
 } from "../database/types";
+
 import type { ProdeGameWithDetails } from "../services/prodeGames";
 
+import { supabase } from "../lib/supabase";
 import { savePredictions } from "../services/predictions";
 import { getProdeGameById } from "../services/prodeGames";
 
@@ -29,6 +32,8 @@ interface PredictionStore {
   saveError: string | null;
 
   loadGame: (gameId: string) => Promise<void>;
+
+  updateMatch: (match: Match) => void;
 
   submitPredictions: (
     input: SaveGamePredictionsInput,
@@ -75,6 +80,61 @@ export const usePredictionStore = create<PredictionStore>(
           loading: false,
         });
       }
+    },
+
+    updateMatch: (updatedMatch) => {
+      set((state) => {
+        if (!state.game) {
+          return state;
+        }
+
+        let matchFound = false;
+
+        const matchdays = state.game.matchdays.map(
+          (matchday) => ({
+            ...matchday,
+
+            matches: matchday.matches.map((match) => {
+              if (match.id !== updatedMatch.id) {
+                return match;
+              }
+
+              matchFound = true;
+
+              return {
+                ...match,
+                ...updatedMatch,
+
+                // Conservamos las relaciones que no vienen
+                // en el evento Realtime de la tabla matches.
+                home_team: match.home_team,
+                away_team: match.away_team,
+              };
+            }),
+          }),
+        );
+
+        if (!matchFound) {
+          return state;
+        }
+
+        console.log(
+          "⚽ Partido actualizado en vivo:",
+          updatedMatch.id,
+          updatedMatch.home_score,
+          "-",
+          updatedMatch.away_score,
+          updatedMatch.status,
+        );
+
+        return {
+          ...state,
+          game: {
+            ...state.game,
+            matchdays,
+          },
+        };
+      });
     },
 
     submitPredictions: async ({
@@ -134,3 +194,40 @@ export const usePredictionStore = create<PredictionStore>(
     },
   }),
 );
+
+export function subscribeToLiveMatches() {
+  const channel = supabase
+    .channel("prode-live-matches")
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "matches",
+      },
+      (payload) => {
+        console.log(
+          "📡 Realtime recibió actualización:",
+          payload.new,
+        );
+
+        usePredictionStore
+          .getState()
+          .updateMatch(payload.new as Match);
+      },
+    )
+    .subscribe((status) => {
+      console.log(
+        "📡 Estado Realtime matches:",
+        status,
+      );
+    });
+
+  return () => {
+    console.log(
+      "📡 Cerrando Realtime matches",
+    );
+
+    supabase.removeChannel(channel);
+  };
+}

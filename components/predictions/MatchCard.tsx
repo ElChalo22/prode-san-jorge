@@ -1,10 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
+import React from "react";
 import {
+  ActivityIndicator,
   Image,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  View,
+  View
 } from "react-native";
 
 export type Prediction =
@@ -13,6 +17,20 @@ export type Prediction =
   | "2"
   | "1X"
   | "X2";
+
+export type TeamFormResult = "V" | "E" | "D";
+
+export type MatchStats = {
+  homeForm?: TeamFormResult[];
+  awayForm?: TeamFormResult[];
+  homeH2hWins?: number;
+  drawsH2h?: number;
+  awayH2hWins?: number;
+  stadium?: string | null;
+  capacity?: string | number | null;
+  referee?: string | null;
+  tv?: string | null;
+};
 
 type MatchCardProps = {
   kickoffAt: string;
@@ -29,6 +47,12 @@ type MatchCardProps = {
   showDoubleOptions?: boolean;
   doubleLimitReached?: boolean;
   onDoubleLimitReached?: () => void;
+
+  providerId?: string | null;
+  stats?: MatchStats | null;
+  statsLoading?: boolean;
+  statsError?: string | null;
+  onStatsPress?: (providerId?: string | null) => void;
 };
 
 export const isDoublePrediction = (
@@ -89,6 +113,29 @@ function formatKickoff(
   return `${weekday} ${day} ${month} · ${time}`;
 }
 
+function FormPill({ result }: { result: TeamFormResult }) {
+  const icon =
+    result === "V"
+      ? "checkmark"
+      : result === "E"
+        ? "remove"
+        : "close";
+
+  return (
+    <View
+      style={[
+        styles.formPill,
+        result === "V" && styles.formWin,
+        result === "E" && styles.formDraw,
+        result === "D" && styles.formLoss,
+      ]}
+    >
+      <Ionicons name={icon} size={11} color="#FFFFFF" />
+    </View>
+  );
+}
+
+
 export default function MatchCard({
   kickoffAt,
 
@@ -104,7 +151,15 @@ export default function MatchCard({
   showDoubleOptions = false,
   doubleLimitReached = false,
   onDoubleLimitReached,
+
+  providerId,
+  stats,
+  statsLoading = false,
+  statsError = null,
+  onStatsPress,
 }: MatchCardProps) {
+  const [statsVisible, setStatsVisible] =
+    React.useState(false);
   const seleccionar = (
     prediction: Prediction,
   ) => {
@@ -130,6 +185,11 @@ export default function MatchCard({
     doubleLimitReached &&
     !isDoublePrediction(selected);
 
+  const abrirEstadisticas = () => {
+    setStatsVisible(true);
+    onStatsPress?.(providerId);
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -145,19 +205,38 @@ export default function MatchCard({
           </Text>
         </View>
 
-        {isDoublePrediction(selected) && (
-          <View style={styles.doubleBadge}>
-            <Ionicons
-              name="shield-checkmark"
-              size={10}
-              color="#9A6513"
-            />
+        <View style={styles.headerActions}>
+          {isDoublePrediction(selected) && (
+            <View style={styles.doubleBadge}>
+              <Ionicons
+                name="shield-checkmark"
+                size={10}
+                color="#9A6513"
+              />
 
-            <Text style={styles.doubleBadgeText}>
-              DOBLE
-            </Text>
-          </View>
-        )}
+              <Text style={styles.doubleBadgeText}>
+                DOBLE
+              </Text>
+            </View>
+          )}
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Ver estadísticas de ${local} vs ${visitante}`}
+            hitSlop={8}
+            onPress={abrirEstadisticas}
+            style={({ pressed }) => [
+              styles.statsButton,
+              pressed && styles.statsButtonPressed,
+            ]}
+          >
+            <Ionicons
+              name="stats-chart"
+              size={14}
+              color="#16874A"
+            />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.predictionRow}>
@@ -433,6 +512,252 @@ export default function MatchCard({
           </View>
         </View>
       )}
+
+      <Modal
+        animationType="slide"
+        transparent
+        visible={statsVisible}
+        onRequestClose={() => setStatsVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            style={styles.modalDismissArea}
+            onPress={() => setStatsVisible(false)}
+          />
+
+          <View style={styles.statsSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.statsSheetHeader}>
+              <View style={styles.statsTitleWrap}>
+                <View style={styles.statsTitleIcon}>
+                  <Ionicons
+                    name="stats-chart"
+                    size={15}
+                    color="#16874A"
+                  />
+                </View>
+
+                <View style={styles.statsTitleTexts}>
+                  <Text style={styles.statsTitle}>
+                    Estadísticas del partido
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={styles.statsSubtitle}
+                  >
+                    {local} vs {visitante}
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                hitSlop={8}
+                onPress={() => setStatsVisible(false)}
+                style={({ pressed }) => [
+                  styles.closeButton,
+                  pressed && styles.statsButtonPressed,
+                ]}
+              >
+                <Ionicons
+                  name="close"
+                  size={19}
+                  color="#222222"
+                />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.statsContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {statsLoading ? (
+                <View style={styles.statsState}>
+                  <ActivityIndicator
+                    size="small"
+                    color="#16874A"
+                  />
+                  <Text style={styles.statsStateText}>
+                    Cargando estadísticas...
+                  </Text>
+                </View>
+              ) : statsError ? (
+                <View style={styles.statsState}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={22}
+                    color="#B54747"
+                  />
+                  <Text style={styles.statsErrorText}>
+                    {statsError}
+                  </Text>
+                </View>
+              ) : stats ? (
+                <>
+                  {(stats.homeForm?.length ||
+                    stats.awayForm?.length) && (
+                    <View style={styles.statsSection}>
+                      <Text style={styles.statsSectionTitle}>
+                        ÚLTIMOS PARTIDOS
+                      </Text>
+
+                      <View style={styles.formTeamRow}>
+                        <View style={styles.formTeamName}>
+                          {localLogo ? (
+                            <Image
+                              source={{ uri: localLogo }}
+                              style={styles.statsTeamLogo}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <Ionicons
+                              name="shield-outline"
+                              size={21}
+                              color="#222222"
+                            />
+                          )}
+                          <Text
+                            numberOfLines={1}
+                            style={styles.formTeamText}
+                          >
+                            {local}
+                          </Text>
+                        </View>
+                        <View style={styles.formResults}>
+                          {stats.homeForm?.map((result, index) => (
+                            <FormPill
+                              key={`home-${index}`}
+                              result={result}
+                            />
+                          ))}
+                        </View>
+                      </View>
+
+                      <View style={styles.formTeamRow}>
+                        <View style={styles.formTeamName}>
+                          {visitanteLogo ? (
+                            <Image
+                              source={{ uri: visitanteLogo }}
+                              style={styles.statsTeamLogo}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <Ionicons
+                              name="shield-outline"
+                              size={21}
+                              color="#222222"
+                            />
+                          )}
+                          <Text
+                            numberOfLines={1}
+                            style={styles.formTeamText}
+                          >
+                            {visitante}
+                          </Text>
+                        </View>
+                        <View style={styles.formResults}>
+                          {stats.awayForm?.map((result, index) => (
+                            <FormPill
+                              key={`away-${index}`}
+                              result={result}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    </View>
+                  )}
+
+                  {(stats.homeH2hWins !== undefined ||
+                    stats.drawsH2h !== undefined ||
+                    stats.awayH2hWins !== undefined) && (
+                    <View style={styles.statsSection}>
+                      <Text style={styles.statsSectionTitle}>
+                        ENFRENTAMIENTOS ENTRE SÍ
+                      </Text>
+                      <View style={styles.h2hRow}>
+                        <View style={styles.h2hItem}>
+                          <Text style={styles.h2hValue}>
+                            {stats.homeH2hWins ?? 0}
+                          </Text>
+                          <Text style={styles.h2hLabel}>
+                            Victorias de {local}
+                          </Text>
+                        </View>
+                        <View style={styles.h2hDivider} />
+                        <View style={styles.h2hItem}>
+                          <Text style={styles.h2hValue}>
+                            {stats.drawsH2h ?? 0}
+                          </Text>
+                          <Text style={styles.h2hLabel}>
+                            Empates
+                          </Text>
+                        </View>
+                        <View style={styles.h2hDivider} />
+                        <View style={styles.h2hItem}>
+                          <Text style={styles.h2hValue}>
+                            {stats.awayH2hWins ?? 0}
+                          </Text>
+                          <Text style={styles.h2hLabel}>
+                            Victorias de {visitante}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+
+                  {(stats.stadium ||
+                    stats.capacity ||
+                    stats.referee ||
+                    stats.tv) && (
+                    <View style={styles.statsSection}>
+                      <Text style={styles.statsSectionTitle}>
+                        INFORMACIÓN DEL PARTIDO
+                      </Text>
+                      {[
+                        ["location-outline", "Estadio", stats.stadium],
+                        ["people-outline", "Capacidad", stats.capacity],
+                        ["person-outline", "Árbitro", stats.referee],
+                        ["tv-outline", "Televisión", stats.tv],
+                      ].map(([icon, label, value]) =>
+                        value ? (
+                          <View key={String(label)} style={styles.infoRow}>
+                            <View style={styles.infoIcon}>
+                              <Ionicons
+                                name={icon as keyof typeof Ionicons.glyphMap}
+                                size={15}
+                                color="#16874A"
+                              />
+                            </View>
+                            <View style={styles.infoTextWrap}>
+                              <Text style={styles.infoLabel}>
+                                {label}
+                              </Text>
+                              <Text style={styles.infoValue}>
+                                {String(value)}
+                              </Text>
+                            </View>
+                          </View>
+                        ) : null,
+                      )}
+                    </View>
+                  )}
+                </>
+              ) : (
+                <View style={styles.statsState}>
+                  <Ionicons
+                    name="analytics-outline"
+                    size={24}
+                    color="#777777"
+                  />
+                  <Text style={styles.statsStateText}>
+                    Este partido todavía no tiene estadísticas disponibles.
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -506,6 +831,29 @@ const styles = StyleSheet.create({
 
     fontSize: 7,
     fontWeight: "900",
+  },
+
+
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  statsButton: {
+    width: 27,
+    height: 27,
+    borderRadius: 14,
+    backgroundColor: "#EAF7F0",
+    borderWidth: 1,
+    borderColor: "#CFECDD",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  statsButtonPressed: {
+    opacity: 0.65,
+    transform: [{ scale: 0.95 }],
   },
 
   predictionRow: {
@@ -693,6 +1041,269 @@ const styles = StyleSheet.create({
     fontWeight: "700",
 
     textAlign: "center",
+  },
+
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.38)",
+    justifyContent: "flex-end",
+  },
+
+  modalDismissArea: {
+    flex: 1,
+  },
+
+  statsSheet: {
+    maxHeight: "78%",
+    minHeight: 330,
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 8,
+  },
+
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D7D7D7",
+    alignSelf: "center",
+    marginBottom: 8,
+  },
+
+  statsSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EFEFEF",
+  },
+
+  statsTitleWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingRight: 12,
+  },
+
+  statsTitleIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#EAF7F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  statsTitleTexts: {
+    flex: 1,
+  },
+
+  statsTitle: {
+    color: "#111111",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  statsSubtitle: {
+    color: "#777777",
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  statsContent: {
+    padding: 16,
+    paddingBottom: 28,
+    gap: 12,
+  },
+
+  statsState: {
+    minHeight: 180,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    paddingHorizontal: 24,
+  },
+
+  statsStateText: {
+    color: "#666666",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+  statsErrorText: {
+    color: "#B54747",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+  statsSection: {
+    backgroundColor: "#F8F9F9",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#ECEEEE",
+  },
+
+  statsSectionTitle: {
+    color: "#111111",
+    fontSize: 10,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
+
+  formTeamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    minHeight: 34,
+  },
+
+  formTeamName: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+
+  statsTeamLogo: {
+    width: 21,
+    height: 21,
+  },
+
+  formTeamText: {
+    flex: 1,
+    color: "#222222",
+    fontSize: 9,
+    fontWeight: "800",
+  },
+
+  formResults: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  formPill: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  formWin: {
+    backgroundColor: "#18A558",
+  },
+
+  formDraw: {
+    backgroundColor: "#8C9399",
+  },
+
+  formLoss: {
+    backgroundColor: "#D84A4A",
+  },
+
+  h2hRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+
+  h2hItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+
+  h2hDivider: {
+    width: 1,
+    backgroundColor: "#E1E3E4",
+  },
+
+  h2hValue: {
+    color: "#16874A",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  h2hLabel: {
+    color: "#666666",
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 2,
+  },
+
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingVertical: 6,
+  },
+
+  infoIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#EAF7F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  infoTextWrap: {
+    flex: 1,
+  },
+
+  infoLabel: {
+    color: "#888888",
+    fontSize: 8,
+    fontWeight: "700",
+  },
+
+  infoValue: {
+    color: "#222222",
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 1,
+  },
+
+  webViewContainer: {
+    height: 560,
+    overflow: "hidden",
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+  },
+
+  webView: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+
+  webViewLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
   },
 
   pressed: {
