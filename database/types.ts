@@ -123,6 +123,7 @@ export interface ProdeGame {
   status: GameStatus;
   opens_at: string | null;
   closes_at: string;
+  double_chance_limit: number;
   payment_alias: string | null;
   payment_cbu: string | null;
   payment_holder: string | null;

@@ -2,21 +2,26 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { ReactNode, useRef } from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    Pressable,
-    StyleSheet,
-    Text,
-    useColorScheme,
-    View,
-    ViewStyle,
+  ActivityIndicator,
+  Animated,
+  Pressable,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  View,
+  ViewStyle,
 } from "react-native";
 
 import { Colors } from "../../constants/colors";
 import { Radius } from "../../constants/radius";
 import { Spacing } from "../../constants/spacing";
 
-type ButtonVariant = "primary" | "secondary" | "outline" | "ghost";
+type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "outline"
+  | "ghost"
+  | "white";
 
 type ButtonProps = {
   title: string;
@@ -45,7 +50,6 @@ export default function Button({
   const theme = colorScheme === "dark" ? Colors.dark : Colors.light;
 
   const scale = useRef(new Animated.Value(1)).current;
-
   const isDisabled = disabled || loading;
 
   const animatePressIn = () => {
@@ -94,6 +98,11 @@ export default function Button({
           backgroundColor: "transparent",
         };
 
+      case "white":
+        return {
+          backgroundColor: "#FFFFFF",
+        };
+
       case "primary":
       default:
         return {
@@ -104,6 +113,8 @@ export default function Button({
 
   const getTextColor = () => {
     if (variant === "primary") return "#FFFFFF";
+    if (variant === "white") return "#111827";
+
     return theme.text;
   };
 

@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   },
 
   shieldsLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 
   shieldPosition: {
