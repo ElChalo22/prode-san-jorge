@@ -6,6 +6,7 @@ import {
   Animated,
   Dimensions,
   Image,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -76,6 +77,26 @@ function shuffle<T>(items: T[]) {
 
 export default function WelcomeScreen() {
   const [teams, setTeams] = useState<WelcomeTeam[]>([]);
+  const [savedAccount, setSavedAccount] = useState<{ username: string | null; email: string | null; needsUsername: boolean } | null>(null);
+  const [switching, setSwitching] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const loadAccount = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error || !data.session?.user) return;
+      const { data: profile } = await supabase.from("profiles")
+        .select("username, onboarding_completed")
+        .eq("id", data.session.user.id).maybeSingle();
+      if (active) setSavedAccount({
+        username: profile?.username ?? null,
+        email: data.session.user.email ?? null,
+        needsUsername: profile !== null && !profile?.onboarding_completed,
+      });
+    };
+    void loadAccount();
+    return () => { active = false; };
+  }, []);
 
   const shieldsOpacity = useRef(new Animated.Value(0)).current;
   const shieldsScale = useRef(new Animated.Value(0.8)).current;
@@ -189,7 +210,15 @@ export default function WelcomeScreen() {
   ]);
 
   const handleStart = () => {
-    router.push("/onboarding/login");
+    router.push(savedAccount ? savedAccount.needsUsername ? "/onboarding/username" : "/(tabs)" : "/onboarding/login");
+  };
+
+  const changeAccount = async () => {
+    if (switching) return;
+    setSwitching(true);
+    const { error } = await supabase.auth.signOut();
+    setSwitching(false);
+    if (!error) router.push("/onboarding/login");
   };
 
   return (
@@ -272,10 +301,13 @@ export default function WelcomeScreen() {
         ]}
       >
         <Button
-          title="COMENZAR"
+          title={savedAccount ? `ENTRAR COMO ${savedAccount.username ? `@${savedAccount.username}` : savedAccount.email ?? "MI CUENTA"}` : "COMENZAR"}
           variant="white"
           onPress={handleStart}
         />
+        {savedAccount ? <Pressable disabled={switching} onPress={() => void changeAccount()} style={styles.otherAccount}>
+          <Text style={styles.otherAccountText}>Usar otra cuenta</Text>
+        </Pressable> : null}
       </Animated.View>
     </View>
   );
@@ -364,4 +396,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 26,
     zIndex: 3,
   },
+  otherAccount: { alignItems: "center", padding: 12, marginTop: 8 },
+  otherAccountText: { color: "#FFFFFF", fontSize: 14, fontWeight: "600" },
 });
