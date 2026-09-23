@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Image, RefreshControl, ScrollView, StyleSheet, Text, useColorScheme, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useColorScheme, View } from "react-native";
 import { supabase } from "../../lib/supabase";
 import { darkColors, lightColors } from "../../theme/colors";
 
@@ -14,16 +14,6 @@ type Participation = {
   prode_games: { name: string } | { name: string }[] | null;
 };
 
-// Datos exclusivos de la vista previa; nunca se escriben en Supabase.
-const PREVIEW_PROFILE: Profile = {
-  username: "Chalo22",
-  full_name: null,
-  avatar_url: null,
-};
-const PREVIEW_PARTICIPATIONS: Participation[] = [
-  { id: "preview-liga", status: "confirmed", hits: 1, processed_matches: 12, prode_games: { name: "Liga Argentina · Fecha de ejemplo" } },
-  { id: "preview-internacional", status: "confirmed", hits: 13, processed_matches: 14, prode_games: { name: "Internacional · Fecha de ejemplo" } },
-];
 const REWARD_MILESTONES = [50, 125] as const;
 
 export default function PerfilScreen() {
@@ -33,6 +23,7 @@ export default function PerfilScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -40,11 +31,13 @@ export default function PerfilScreen() {
       const { data: auth, error: authError } = await supabase.auth.getSession();
       if (authError) throw authError;
       if (!auth.session?.user) {
+        setSignedIn(false);
         setProfile(null);
         setParticipations([]);
         return;
       }
       const userId = auth.session.user.id;
+      setSignedIn(true);
       const [profileResult, participationResult] = await Promise.all([
         supabase.from("profiles").select("username, full_name, avatar_url").eq("id", userId).single(),
         supabase.from("participations")
@@ -64,9 +57,8 @@ export default function PerfilScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
-  const isPreview = !loading && !error && !profile;
-  const displayProfile = isPreview ? PREVIEW_PROFILE : profile;
-  const displayParticipations = isPreview ? PREVIEW_PARTICIPATIONS : participations;
+  const displayProfile = profile;
+  const displayParticipations = participations;
   const confirmed = displayParticipations.filter((item) => item.status === "confirmed");
   const totalHits = confirmed.reduce((sum, item) => sum + (item.hits ?? 0), 0);
   const nextMilestone = REWARD_MILESTONES.find((target) => totalHits < target);
@@ -85,12 +77,15 @@ export default function PerfilScreen() {
       <Text style={[styles.title, { color: colors.text.primary }]}>Mi perfil</Text>
       {loading ? <ActivityIndicator size="large" color={colors.primary} /> : null}
       {error ? <Text style={[styles.message, { color: colors.danger }]}>{error}</Text> : null}
-      {isPreview ? (
+      {!loading && !error && !signedIn ? (
         <View style={[styles.previewBanner, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
-          <Ionicons name="eye-outline" size={20} color={colors.primary} />
+          <Ionicons name="person-outline" size={20} color={colors.primary} />
           <View style={styles.rowName}>
-            <Text style={[styles.previewTitle, { color: colors.text.primary }]}>Vista previa · datos de ejemplo</Text>
-            <Text style={[styles.message, { color: colors.text.secondary }]}>Así se verá tu perfil cuando conectemos el inicio de sesión.</Text>
+            <Text style={[styles.previewTitle, { color: colors.text.primary }]}>Ingresá a tu cuenta</Text>
+            <Text style={[styles.message, { color: colors.text.secondary }]}>Consultá tu apodo, tus aciertos y los prodes que jugaste.</Text>
+            <Pressable onPress={() => router.push("/onboarding/login")} style={[styles.loginButton, { backgroundColor: colors.primary }]}>
+              <Text style={styles.loginButtonText}>Iniciar sesión o registrarme</Text>
+            </Pressable>
           </View>
         </View>
       ) : null}
@@ -104,7 +99,7 @@ export default function PerfilScreen() {
           <Text style={[styles.hint, { color: colors.text.secondary }]}>Tu nombre público en el prode</Text>
           <View style={[styles.team, { backgroundColor: colors.background }]}>
             <Ionicons name="shield-outline" size={18} color={colors.primary} />
-            <Text style={{ color: colors.text.secondary }}>{isPreview ? "Equipo favorito · River Plate (ejemplo)" : "Equipo favorito · Próximamente"}</Text>
+            <Text style={{ color: colors.text.secondary }}>Equipo favorito · Próximamente</Text>
           </View>
         </View>
         <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -158,7 +153,7 @@ export default function PerfilScreen() {
           <Ionicons name="lock-closed-outline" size={18} color={colors.text.secondary} />
           <View style={styles.rowName}>
             <Text style={[styles.rowTitle, { color: colors.text.primary }]}>Datos de verificación</Text>
-            <Text style={{ color: colors.text.secondary }}>{isPreview ? "Nombre real · Solo para verificación" : displayProfile.full_name || "Nombre real aún no cargado"}</Text>
+            <Text style={{ color: colors.text.secondary }}>{displayProfile.full_name || "Nombre real aún no cargado"}</Text>
             <Text style={[styles.privateHint, { color: colors.text.secondary }]}>No se muestra en esta pantalla a otros jugadores.</Text>
           </View>
         </View>
@@ -178,6 +173,8 @@ const styles = StyleSheet.create({
   hint: { fontSize: 13, marginTop: 4 },
   previewBanner: { borderWidth: 1, borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
   previewTitle: { fontSize: 15, fontWeight: "800" },
+  loginButton: { alignSelf: "flex-start", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8 },
+  loginButtonText: { color: "#FFFFFF", fontWeight: "800" },
   team: { marginTop: 18, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8 },
   summaryCard: { borderWidth: 1, borderRadius: 18, padding: 20, alignItems: "center", gap: 4 },
   summaryNumber: { fontSize: 28, fontWeight: "900", marginTop: 4 },
