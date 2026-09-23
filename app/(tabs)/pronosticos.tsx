@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -198,6 +198,11 @@ export default function PronosticosScreen() {
       return;
     }
 
+    if (!game || game.status !== "open" || Date.now() >= new Date(game.closes_at).getTime()) {
+      Alert.alert("Prode cerrado", "La fecha ya cerró y no acepta más pronósticos.");
+      return;
+    }
+
     if (completados < partidos.length) {
       const faltantes = partidos.length - completados;
 
@@ -225,10 +230,7 @@ export default function PronosticosScreen() {
     }
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      const { data: auth, error: userError } = await supabase.auth.getSession();
 
       if (userError) {
         console.error(
@@ -244,10 +246,15 @@ export default function PronosticosScreen() {
         return;
       }
 
+      const user = auth.session?.user;
       if (!user) {
         Alert.alert(
           "Sesión requerida",
           "Necesitás iniciar sesión antes de guardar tus pronósticos.",
+          [
+            { text: "Cancelar", style: "cancel" },
+            { text: "Iniciar sesión", onPress: () => router.push("/onboarding/login") },
+          ],
         );
 
         return;
