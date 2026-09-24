@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import { useStaffRole } from "../../lib/useStaffRole";
 
 export default function TabsLayout() {
+  const { role } = useStaffRole();
   return (
     <Tabs
       screenOptions={{
@@ -68,6 +70,16 @@ export default function TabsLayout() {
           title: "Perfil",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="administracion"
+        options={{
+          title: role === "superadmin" ? "Superadmin" : "Admin",
+          href: role ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
           ),
         }}
       />
