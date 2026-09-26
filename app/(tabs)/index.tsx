@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -8,6 +9,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Pressable,
 } from "react-native";
 
 import HomeHeader from "../../components/home/HomeHeader";
@@ -30,6 +32,7 @@ export default function HomeScreen() {
   const colors = isDark ? darkColors : lightColors;
   const [staff, setStaff] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [identityStatus, setIdentityStatus] = useState<string | null>(null);
   const [username, setUsername] = useState("Jugador");
   const [playerStats, setPlayerStats] = useState<PlayerStats>({ played: null, hits: null, wins: null, won: null });
   const [ranking, setRanking] = useState<RankingRow[]>([]);
@@ -45,18 +48,21 @@ export default function HomeScreen() {
         setUsername("Jugador");
         setPlayerStats({ played: null, hits: null, wins: null, won: null });
         setUnreadCount(0);
+        setIdentityStatus(null);
         setStaff(false);
         return;
       }
-      const [profile, entries, notice] = await Promise.all([
+      const [profile, entries, notice, verification] = await Promise.all([
         supabase.from("profiles").select("username,role").eq("id", user.id).single(),
         supabase.from("participations").select("id,hits").eq("user_id", user.id).eq("status", "confirmed"),
         supabase.from("player_notifications").select("id", { count: "exact", head: true })
           .eq("user_id", user.id).is("read_at", null),
+        supabase.from("identity_requests").select("status").eq("user_id", user.id).maybeSingle(),
       ]);
-      if (profile.error || entries.error || notice.error) throw profile.error ?? entries.error ?? notice.error;
+      if (profile.error || entries.error || notice.error || verification.error) throw profile.error ?? entries.error ?? notice.error ?? verification.error;
       setUsername(profile.data.username?.trim() || "Jugador");
       setUnreadCount(notice.count ?? 0);
+      setIdentityStatus(verification.data?.status ?? null);
       setStaff(profile.data.role === "admin" || profile.data.role === "superadmin");
       const confirmed = entries.data ?? [];
       const { data: awards, error: awardsError } = confirmed.length
@@ -100,6 +106,7 @@ export default function HomeScreen() {
       >
         <HomeHeader username={username} unreadCount={unreadCount} openGames={games.length}
           onNotifications={() => router.push("/notifications")}
+          onSettings={() => router.push("/(tabs)/configuracion")}
           onAdmin={staff ? () => router.push("/administracion") : undefined} />
 
         {loading && (
@@ -143,6 +150,22 @@ export default function HomeScreen() {
         <HomeStats {...playerStats} />
 
         <HomeRanking ranking={ranking} />
+        <View style={{ gap: 10, marginTop: 24 }}>
+          {([
+            { kind: "verify", label: identityStatus === "approved" ? "Identidad verificada" : identityStatus === "pending" ? "Verificación pendiente" : "Verificar usuario", icon: "id-card-outline" },
+            { kind: "suggestion", label: "Recomendaciones y cambios", icon: "bulb-outline" },
+            { kind: "claim", label: "Hacer un reclamo", icon: "chatbubble-ellipses-outline" },
+          ] as const).map((item) => <Pressable key={item.kind}
+            disabled={item.kind === "verify" && (identityStatus === "approved" || identityStatus === "pending")}
+            onPress={() => router.push({ pathname: "/requests/[kind]", params: { kind: item.kind } })}
+            style={{ backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1,
+              borderRadius: 15, padding: 16, flexDirection: "row", alignItems: "center", gap: 12,
+              opacity: item.kind === "verify" && (identityStatus === "approved" || identityStatus === "pending") ? 0.65 : 1 }}>
+            <Ionicons name={item.icon} size={23} color={colors.primary} />
+            <Text style={{ flex: 1, color: colors.text.primary, fontWeight: "800" }}>{item.label}</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.text.secondary} />
+          </Pressable>)}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

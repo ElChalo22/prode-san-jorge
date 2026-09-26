@@ -7,6 +7,10 @@ import { useStaffRole } from "../../lib/useStaffRole";
 import { useAppAppearance } from "../../lib/appearance";
 import { darkColors, lightColors } from "../../theme/colors";
 
+type IdentityRequest = { id: string; user_id: string; file_path: string; created_at: string };
+type Feedback = { id: string; user_id: string; kind: string; message: string; file_paths: string[]; created_at: string };
+type CashReward = { id: string; user_id: string; amount: number; created_at: string };
+type TransferAccount = { id: string; label: string; alias: string | null; cbu: string | null; holder: string | null; active: boolean };
 type Payment = {
   id: string;
   amount: number;
@@ -30,24 +34,34 @@ export default function AdministracionScreen() {
   const { isDark } = useAppAppearance();
   const colors = isDark ? darkColors : lightColors;
   const { role, loading: checkingRole } = useStaffRole();
+  const [identities, setIdentities] = useState<IdentityRequest[]>([]);
+  const [feedback, setFeedback] = useState<Feedback[]>([]);
+  const [cashRewards, setCashRewards] = useState<CashReward[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [selectedReview, setSelectedReview] = useState<string | null>(null);
   const [reviewPredictions, setReviewPredictions] = useState<ReviewPrediction[]>([]);
-  const [games, setGames] = useState<{ id: string; name: string; status: string }[]>([]);
+  const [games, setGames] = useState<{ id: string; name: string; status: string; game_type: string; entry_fee: number; house_percentage: number; transfer_account_id: string | null }[]>([]);
+  const [accounts, setAccounts] = useState<TransferAccount[]>([]);
+  const [selectedGameId, setSelectedGameId] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [housePercentage, setHousePercentage] = useState("25");
+  const [expressHousePercentage, setExpressHousePercentage] = useState("25");
+  const [accountLabel, setAccountLabel] = useState("");
+  const [accountAlias, setAccountAlias] = useState("");
+  const [accountCbu, setAccountCbu] = useState("");
+  const [accountHolder, setAccountHolder] = useState("");
   const [players, setPlayers] = useState<{ id: string; username: string | null; role: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [section, setSection] = useState<"resumen" | "pagos" | "prodes" | "argentina" | "express" | "equipo">("resumen");
+  const [section, setSection] = useState<"resumen" | "pagos" | "prodes" | "argentina" | "express" | "solicitudes" | "cuentas" | "equipo">("resumen");
   const [catalog, setCatalog] = useState<CatalogMatch[]>([]);
   const [chosen, setChosen] = useState<string[]>([]);
   const [expressName, setExpressName] = useState("");
   const [expressDescription, setExpressDescription] = useState("");
   const [expressFee, setExpressFee] = useState("");
-  const [transferAlias, setTransferAlias] = useState("");
   const [argentinaFee, setArgentinaFee] = useState("");
-  const [argentinaAlias, setArgentinaAlias] = useState("");
   const [matchQuery, setMatchQuery] = useState("");
   const [loadingCatalog, setLoadingCatalog] = useState(false);
 
@@ -56,34 +70,44 @@ export default function AdministracionScreen() {
     setBusy(true);
     setError(null);
     try {
-      const [paymentResult, gameResult, profileResult, reviewResult, settingsResult] = await Promise.all([
+      const [paymentResult, gameResult, profileResult, reviewResult, identityResult, feedbackResult, rewardResult, accountResult] = await Promise.all([
         supabase.from("payments")
           .select("id, amount, currency, status, participations(user_id, prode_games(name))")
           .order("created_at", { ascending: false }).limit(100),
-        supabase.from("prode_games").select("id, name, status")
+        supabase.from("prode_games").select("id, name, status,game_type,entry_fee,house_percentage,transfer_account_id")
           .order("created_at", { ascending: false }).limit(30),
         supabase.from("profiles").select("id, username, role")
           .order("created_at", { ascending: false }).limit(500),
         supabase.from("participations")
           .select("id, user_id, status, submitted_at, prode_games(name,entry_fee,game_type), payments(status,amount,payment_receipts(file_url))")
           .eq("status", "payment_under_review").order("submitted_at", { ascending: false }).limit(100),
-        supabase.from("app_settings").select("argentina_entry_fee,argentina_payment_alias").limit(1).single(),
+        supabase.from("identity_requests").select("id,user_id,file_path,created_at").eq("status", "pending").order("created_at", { ascending: false }),
+        supabase.from("user_feedback").select("id,user_id,kind,message,file_paths,created_at").eq("status", "pending").order("created_at", { ascending: false }),
+        supabase.from("reward_claims").select("id,user_id,amount,created_at").eq("status", "pending").order("created_at", { ascending: false }),
+        supabase.from("transfer_accounts").select("id,label,alias,cbu,holder,active").eq("active", true).order("created_at", { ascending: false }),
       ]);
       if (paymentResult.error) throw paymentResult.error;
       if (gameResult.error) throw gameResult.error;
       if (profileResult.error) throw profileResult.error;
       if (reviewResult.error) throw reviewResult.error;
-      if (settingsResult.error) throw settingsResult.error;
+      if (identityResult.error) throw identityResult.error;
+      if (feedbackResult.error) throw feedbackResult.error;
+      if (rewardResult.error) throw rewardResult.error;
+      if (accountResult.error) throw accountResult.error;
+      setIdentities(identityResult.data ?? []);
+      setFeedback(feedbackResult.data ?? []);
+      setCashRewards(rewardResult.data ?? []);
       setPayments((paymentResult.data ?? []) as Payment[]);
       setGames(gameResult.data ?? []);
+      setAccounts(accountResult.data ?? []);
+      const argentinaGames = (gameResult.data ?? []).filter((game) => game.game_type === "automatic" && ["draft", "open"].includes(game.status));
+      setSelectedGameId((current) => !current || !argentinaGames.some((game) => game.id === current) ? argentinaGames[0]?.id ?? "" : current);
       setPlayers(profileResult.data ?? []);
       setReviewItems(((reviewResult.data ?? []) as unknown as ReviewItem[]).filter((item) => {
         const game = one(item.prode_games);
         return Number(game?.entry_fee) > 0
           && one(item.payments)?.status === "uploaded";
       }));
-      setArgentinaFee(String(settingsResult.data.argentina_entry_fee || ""));
-      setArgentinaAlias(settingsResult.data.argentina_payment_alias ?? "");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo cargar el panel.");
     } finally {
@@ -116,8 +140,9 @@ export default function AdministracionScreen() {
 
   const publishExpress = async () => {
     const fee = Number(expressFee.replace(",", "."));
-    if (chosen.length < 1 || !expressName.trim() || !Number.isFinite(fee) || fee <= 0 || !transferAlias.trim()) {
-      Alert.alert("Faltan datos", "Ingresá nombre, precio, alias de cobro y al menos un partido.");
+    const house = Number(expressHousePercentage.replace(",", "."));
+    if (chosen.length < 1 || !expressName.trim() || !Number.isFinite(fee) || fee <= 0 || !selectedAccountId || !Number.isFinite(house) || house < 0 || house > 100) {
+      Alert.alert("Faltan datos", "Ingresá nombre, precio, cuenta, comisión entre 0 y 100 y al menos un partido.");
       return;
     }
     setBusy(true);
@@ -130,9 +155,9 @@ export default function AdministracionScreen() {
       setBusy(false);
       return;
     }
-    const { error: publishError } = await supabase.rpc("create_paid_express", {
+    const { error: publishError } = await supabase.rpc("create_paid_express_with_account", {
       game_name: expressName.trim(), game_description: expressDescription.trim(),
-      selected_match_ids: prepared.match_ids, fee, transfer_alias: transferAlias.trim(),
+      selected_match_ids: prepared.match_ids, fee, account_id: selectedAccountId, new_house_percentage: house,
     });
     if (publishError) setError(publishError.message);
     else {
@@ -169,18 +194,69 @@ export default function AdministracionScreen() {
     setBusy(false);
   };
 
+  const reviewIdentity = async (id: string, approve: boolean) => {
+    setBusy(true);
+    const { error: requestError } = await supabase.rpc("review_identity_request", { target_id: id, approve });
+    if (requestError) setError(requestError.message); else await load();
+    setBusy(false);
+  };
+  const markFeedback = async (id: string) => {
+    setBusy(true);
+    const { error: requestError } = await supabase.rpc("resolve_user_feedback", { target_id: id });
+    if (requestError) setError(requestError.message); else await load();
+    setBusy(false);
+  };
+  const markCashPaid = async (id: string) => {
+    setBusy(true);
+    const { error: requestError } = await supabase.rpc("review_cash_reward", { target_id: id });
+    if (requestError) setError(requestError.message); else await load();
+    setBusy(false);
+  };
+  const openPrivateFile = async (bucket: string, path: string) => {
+    const { data, error: linkError } = await supabase.storage.from(bucket).createSignedUrl(path, 60);
+    if (linkError || !data?.signedUrl) { setError(linkError?.message ?? "No pudimos abrir el adjunto."); return; }
+    await Linking.openURL(data.signedUrl);
+  };
+
   const saveArgentinaPayment = async () => {
     const fee = Number(argentinaFee.replace(",", "."));
-    if (!Number.isFinite(fee) || fee <= 0 || !argentinaAlias.trim()) {
-      Alert.alert("Faltan datos", "Ingresá un precio y un alias válidos."); return;
+    const house = Number(housePercentage.replace(",", "."));
+    if (!selectedGameId || !Number.isFinite(fee) || fee <= 0 || !selectedAccountId || !Number.isFinite(house) || house < 0 || house > 100) {
+      Alert.alert("Faltan datos", "Elegí la fecha y cuenta, ingresá un precio y una comisión entre 0 y 100."); return;
     }
     setBusy(true); setError(null);
-    const { error: settingsError } = await supabase.rpc("configure_argentina_payment", {
-      new_fee: fee, new_alias: argentinaAlias.trim(),
+    const { error: settingsError } = await supabase.rpc("configure_argentina_game", {
+      target_game_id: selectedGameId, new_fee: fee, account_id: selectedAccountId, new_house_percentage: house,
     });
     if (settingsError) setError(settingsError.message);
     else { Alert.alert("Configuración guardada", "Se aplicará a próximas fechas y a la actual si todavía nadie jugó."); await load(); }
     setBusy(false);
+  };
+
+  const saveTransferAccount = async () => {
+    if (!accountLabel.trim() || (!accountAlias.trim() && !accountCbu.trim())) {
+      Alert.alert("Faltan datos", "Poné un nombre y un alias o CVU/CBU para la cuenta."); return;
+    }
+    setBusy(true);
+    const { error: accountError } = await supabase.from("transfer_accounts").insert({
+      label: accountLabel.trim(), alias: accountAlias.trim() || null, cbu: accountCbu.replace(/\s/g, "") || null,
+      holder: accountHolder.trim() || null,
+    });
+    if (accountError) setError(accountError.message);
+    else { setAccountLabel(""); setAccountAlias(""); setAccountCbu(""); setAccountHolder(""); await load(); }
+    setBusy(false);
+  };
+
+  const settleGame = async (gameId: string, gameName: string) => {
+    Alert.alert("Calcular ganadores", `Se repartirán entre los máximos aciertos el pozo menos la comisión guardada para ${gameName}.`, [
+      { text: "Cancelar", style: "cancel" }, { text: "Calcular", onPress: async () => {
+        setBusy(true);
+        const { data, error: settleError } = await supabase.rpc("settle_prode_game", { target_game_id: gameId });
+        if (settleError) setError(settleError.message);
+        else Alert.alert("Ganadores notificados", `Se registraron ${data ?? 0} premios.`);
+        setBusy(false);
+      } },
+    ]);
   };
 
   const openReceipt = async (path: string) => {
@@ -224,11 +300,11 @@ export default function AdministracionScreen() {
     {error ? <Text style={{ color: colors.danger }}>{error}</Text> : null}
 
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sections}>
-      {(["resumen", "pagos", "prodes", "argentina", "express", ...(role === "superadmin" ? ["equipo"] : [])] as typeof section[]).map((item) =>
+      {(["resumen", "pagos", "prodes", "argentina", "express", "solicitudes", "cuentas", ...(role === "superadmin" ? ["equipo"] : [])] as typeof section[]).map((item) =>
         <Pressable key={item} onPress={() => { setSection(item); if (item === "express" && !catalog.length) void loadCatalog(); }} accessibilityRole="tab" accessibilityState={{ selected: section === item }}
           style={[styles.section, { backgroundColor: section === item ? colors.primary : colors.surface, borderColor: colors.border }]}>
           <Text style={{ color: section === item ? "#FFFFFF" : colors.text.primary, fontWeight: "700" }}>
-            {item === "resumen" ? "Resumen" : item === "pagos" ? "Revisión" : item === "prodes" ? "Prodes" : item === "argentina" ? "Liga Argentina" : item === "express" ? "Crear Express" : "Equipo"}
+            {item === "resumen" ? "Resumen" : item === "pagos" ? "Revisión" : item === "prodes" ? "Prodes" : item === "argentina" ? "Liga Argentina" : item === "express" ? "Crear Express" : item === "solicitudes" ? "Solicitudes" : item === "cuentas" ? "Cuentas" : "Equipo"}
           </Text>
         </Pressable>)}
     </ScrollView>
@@ -236,8 +312,8 @@ export default function AdministracionScreen() {
     {section === "resumen" ? <>
     <View style={styles.stats}>
       <View style={[styles.card, styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.number, { color: colors.primary }]}>{reviewItems.length}</Text>
-        <Text style={{ color: colors.text.secondary }}>Pronósticos por revisar</Text>
+        <Text style={[styles.number, { color: colors.primary }]}>{reviewItems.length + identities.length + feedback.length + cashRewards.length}</Text>
+        <Text style={{ color: colors.text.secondary }}>Solicitudes por revisar</Text>
       </View>
       <View style={[styles.card, styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.number, { color: colors.primary }]}>{games.filter((game) => game.status === "open").length}</Text>
@@ -258,27 +334,70 @@ export default function AdministracionScreen() {
       games.map((game) => <View key={game.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.itemName, { color: colors.text.primary }]}>{game.name}</Text>
         <Text style={{ color: colors.text.secondary }}>Estado: {game.status === "open" ? "Abierto" : game.status === "closed" ? "Cerrado" : game.status}</Text>
+        <Text style={{ color: colors.text.secondary }}>Entrada ARS {game.entry_fee} · casa {game.house_percentage ?? 25}%</Text>
+        {["closed", "finished"].includes(game.status) && <Pressable disabled={busy} onPress={() => void settleGame(game.id, game.name)} style={[styles.button, { backgroundColor: colors.primary, alignSelf: "flex-start" }]}>
+          <Text style={styles.buttonText}>Calcular y avisar ganadores</Text>
+        </Pressable>}
+      </View>)}
+    </> : null}
+
+    {section === "cuentas" ? <>
+      <Text style={[styles.heading, { color: colors.text.primary }]}>Cuentas para transferencias</Text>
+      <Text style={{ color: colors.text.secondary }}>Guardá las cuentas una sola vez y elegí una al configurar cada Prode. Solo se muestran a quienes estén participando.</Text>
+      <TextInput placeholder="Nombre para identificarla (ej. Cuenta Brubank)" placeholderTextColor={colors.text.secondary}
+        value={accountLabel} onChangeText={setAccountLabel}
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <TextInput placeholder="Alias (opcional)" placeholderTextColor={colors.text.secondary}
+        value={accountAlias} onChangeText={setAccountAlias} autoCapitalize="none"
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <TextInput placeholder="CVU o CBU (opcional)" placeholderTextColor={colors.text.secondary}
+        value={accountCbu} onChangeText={setAccountCbu} keyboardType="number-pad"
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <TextInput placeholder="Titular (opcional)" placeholderTextColor={colors.text.secondary}
+        value={accountHolder} onChangeText={setAccountHolder}
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <Pressable disabled={busy} onPress={() => void saveTransferAccount()} style={[styles.button, { backgroundColor: colors.primary, alignItems: "center" }]}>
+        <Text style={styles.buttonText}>Agregar cuenta</Text>
+      </Pressable>
+      {accounts.map((account) => <View key={account.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.itemName, { color: colors.text.primary }]}>{account.label}</Text>
+        {account.alias ? <Text style={{ color: colors.text.secondary }}>Alias: {account.alias}</Text> : null}
+        {account.cbu ? <Text style={{ color: colors.text.secondary }}>CVU/CBU: {account.cbu}</Text> : null}
+        {account.holder ? <Text style={{ color: colors.text.secondary }}>Titular: {account.holder}</Text> : null}
       </View>)}
     </> : null}
 
     {section === "argentina" ? <>
       <Text style={[styles.heading, { color: colors.text.primary }]}>Cobro de Liga Argentina</Text>
-      <Text style={{ color: colors.text.secondary }}>Configurá la entrada y el alias. La fecha se arma automáticamente con Promiedos; el precio se aplica a la fecha actual si todavía nadie participó y a las próximas.</Text>
+      <Text style={{ color: colors.text.secondary }}>Elegí la fecha, la cuenta y el porcentaje que queda la casa. El resto del pozo se reparte entre los máximos aciertos.</Text>
+      {games.filter((game) => game.game_type === "automatic" && ["draft", "open"].includes(game.status)).map((game) =>
+        <Pressable key={game.id} onPress={() => { setSelectedGameId(game.id); setArgentinaFee(String(game.entry_fee || "")); setHousePercentage(String(game.house_percentage ?? 25)); setSelectedAccountId(game.transfer_account_id ?? ""); }}
+          style={[styles.card, styles.playerRow, { backgroundColor: colors.surface, borderColor: selectedGameId === game.id ? colors.primary : colors.border }]}>
+          <Ionicons name={selectedGameId === game.id ? "radio-button-on" : "radio-button-off"} size={21} color={colors.primary} />
+          <Text style={{ color: colors.text.primary, flex: 1, fontWeight: "700" }}>{game.name}</Text>
+          <Text style={{ color: colors.text.secondary }}>ARS {game.entry_fee}</Text>
+        </Pressable>)}
       <TextInput placeholder="Precio de entrada (ARS)" keyboardType="decimal-pad" placeholderTextColor={colors.text.secondary}
         value={argentinaFee} onChangeText={setArgentinaFee}
         style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
-      <TextInput placeholder="Alias para recibir transferencias" placeholderTextColor={colors.text.secondary}
-        value={argentinaAlias} onChangeText={setArgentinaAlias} autoCapitalize="none"
+      <TextInput placeholder="Porcentaje que retiene la casa (por defecto 25)" keyboardType="decimal-pad" placeholderTextColor={colors.text.secondary}
+        value={housePercentage} onChangeText={setHousePercentage}
         style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <Text style={[styles.itemName, { color: colors.text.primary }]}>Cuenta para esta fecha</Text>
+      {accounts.length === 0 ? <Text style={{ color: colors.text.secondary }}>Primero agregá una cuenta en la sección Cuentas.</Text> : accounts.map((account) =>
+        <Pressable key={account.id} onPress={() => setSelectedAccountId(account.id)} style={[styles.card, styles.playerRow, { backgroundColor: colors.surface, borderColor: selectedAccountId === account.id ? colors.primary : colors.border }]}>
+          <Ionicons name={selectedAccountId === account.id ? "radio-button-on" : "radio-button-off"} size={20} color={colors.primary} />
+          <Text style={{ color: colors.text.primary, flex: 1, fontWeight: "700" }}>{account.label} · {account.alias ?? account.cbu}</Text>
+        </Pressable>)}
       <Pressable disabled={busy} onPress={() => void saveArgentinaPayment()}
         style={[styles.button, { backgroundColor: colors.primary, alignItems: "center" }]}>
-        <Text style={styles.buttonText}>Guardar precio y alias</Text>
+        <Text style={styles.buttonText}>Guardar configuración de esta fecha</Text>
       </Pressable>
     </> : null}
 
     {section === "express" ? <>
       <Text style={[styles.heading, { color: colors.text.primary }]}>Nuevo Prode Express</Text>
-      <Text style={{ color: colors.text.secondary }}>Elegí partidos de Promiedos, fijá el precio y el alias de cobro. Cierra 15 minutos antes del primer partido. La Liga Argentina sigue automática.</Text>
+      <Text style={{ color: colors.text.secondary }}>Elegí partidos, la cuenta de cobro, el precio y la comisión de esta fecha. Cierra 15 minutos antes del primer partido.</Text>
       <TextInput placeholder="Nombre, por ejemplo: Express del miércoles" placeholderTextColor={colors.text.secondary}
         value={expressName} onChangeText={setExpressName} maxLength={80}
         style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
@@ -288,9 +407,15 @@ export default function AdministracionScreen() {
       <TextInput placeholder="Precio de entrada (ARS)" keyboardType="decimal-pad" placeholderTextColor={colors.text.secondary}
         value={expressFee} onChangeText={setExpressFee}
         style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
-      <TextInput placeholder="Alias para recibir transferencias" placeholderTextColor={colors.text.secondary}
-        value={transferAlias} onChangeText={setTransferAlias} autoCapitalize="none"
+      <TextInput placeholder="Porcentaje que retiene la casa (por defecto 25)" keyboardType="decimal-pad" placeholderTextColor={colors.text.secondary}
+        value={expressHousePercentage} onChangeText={setExpressHousePercentage}
         style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <Text style={[styles.itemName, { color: colors.text.primary }]}>Cuenta para este Prode Express</Text>
+      {accounts.map((account) => <Pressable key={account.id} onPress={() => setSelectedAccountId(account.id)}
+        style={[styles.card, styles.playerRow, { backgroundColor: colors.surface, borderColor: selectedAccountId === account.id ? colors.primary : colors.border }]}>
+        <Ionicons name={selectedAccountId === account.id ? "radio-button-on" : "radio-button-off"} size={20} color={colors.primary} />
+        <Text style={{ color: colors.text.primary, flex: 1, fontWeight: "700" }}>{account.label} · {account.alias ?? account.cbu}</Text>
+      </Pressable>)}
       <TextInput placeholder="Buscar equipo, partido o competencia" placeholderTextColor={colors.text.secondary}
         value={matchQuery} onChangeText={setMatchQuery}
         style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
@@ -339,8 +464,8 @@ export default function AdministracionScreen() {
         </Pressable>;
       })}
       {visibleMatches.length > 80 ? <Text style={{ color: colors.text.secondary }}>Mostrando 80 partidos. Usá el buscador para encontrar otro.</Text> : null}
-      <Pressable disabled={busy || chosen.length < 1 || !expressName.trim() || !expressFee.trim() || !transferAlias.trim()} onPress={() => void publishExpress()}
-        style={[styles.button, { backgroundColor: colors.primary, opacity: busy || chosen.length < 1 || !expressName.trim() || !expressFee.trim() || !transferAlias.trim() ? 0.5 : 1, alignItems: "center", marginTop: 16 }]}>
+      <Pressable disabled={busy || chosen.length < 1 || !expressName.trim() || !expressFee.trim() || !selectedAccountId} onPress={() => void publishExpress()}
+        style={[styles.button, { backgroundColor: colors.primary, opacity: busy || chosen.length < 1 || !expressName.trim() || !expressFee.trim() || !selectedAccountId ? 0.5 : 1, alignItems: "center", marginTop: 16 }]}>
         <Text style={styles.buttonText}>Publicar Prode Express</Text>
       </Pressable>
     </> : null}
@@ -381,6 +506,32 @@ export default function AdministracionScreen() {
         </View>;
       })}
     <Text style={{ color: colors.text.secondary }}>La revisión de comprobantes para prodes pagos se incorporará en el siguiente paso.</Text>
+    </> : null}
+
+    {section === "solicitudes" ? <>
+      <Text style={[styles.heading, { color: colors.text.primary }]}>Verificaciones de identidad ({identities.length})</Text>
+      {identities.map((item) => <View key={item.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={{ color: colors.text.primary, fontWeight: "800" }}>@{players.find((player) => player.id === item.user_id)?.username ?? "jugador"}</Text>
+        <Pressable onPress={() => void openPrivateFile("identity-documents", item.file_path)}><Text style={{ color: colors.primary }}>Ver DNI privado</Text></Pressable>
+        <View style={styles.playerRow}>
+          <Pressable disabled={busy} onPress={() => void reviewIdentity(item.id, true)} style={[styles.button, { backgroundColor: colors.primary }]}><Text style={styles.buttonText}>Verificar</Text></Pressable>
+          <Pressable disabled={busy} onPress={() => void reviewIdentity(item.id, false)} style={[styles.button, { backgroundColor: colors.danger }]}><Text style={styles.buttonText}>Rechazar</Text></Pressable>
+        </View>
+      </View>)}
+      <Text style={[styles.heading, { color: colors.text.primary }]}>Reclamos y sugerencias ({feedback.length})</Text>
+      {feedback.map((item) => <View key={item.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.itemName, { color: colors.text.primary }]}>{item.kind === "claim" ? "Reclamo" : "Sugerencia"} · @{players.find((player) => player.id === item.user_id)?.username ?? "jugador"}</Text>
+        <Text style={{ color: colors.text.primary }}>{item.message}</Text>
+        {item.file_paths.map((path, index) => <Pressable key={path} onPress={() => void openPrivateFile("user-claims", path)}><Text style={{ color: colors.primary }}>Ver adjunto {index + 1}</Text></Pressable>)}
+        <Pressable disabled={busy} onPress={() => void markFeedback(item.id)} style={[styles.button, { backgroundColor: colors.primary, alignSelf: "flex-start" }]}><Text style={styles.buttonText}>Marcar resuelto</Text></Pressable>
+      </View>)}
+      <Text style={[styles.heading, { color: colors.text.primary }]}>Premios por pagar ({cashRewards.length})</Text>
+      {cashRewards.map((item) => <View key={item.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.itemName, { color: colors.text.primary }]}>@{players.find((player) => player.id === item.user_id)?.username ?? "jugador"} · ARS {item.amount}</Text>
+        <Pressable disabled={busy} onPress={() => Alert.alert("Confirmar pago", "Marcá el premio como pagado solo después de transferirlo.", [
+          { text: "Cancelar", style: "cancel" }, { text: "Ya transferí", onPress: () => void markCashPaid(item.id) },
+        ])} style={[styles.button, { backgroundColor: colors.primary, alignSelf: "flex-start" }]}><Text style={styles.buttonText}>Marcar pagado</Text></Pressable>
+      </View>)}
     </> : null}
 
     {role === "superadmin" && section === "equipo" ? <>

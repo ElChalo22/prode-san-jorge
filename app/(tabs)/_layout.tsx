@@ -45,9 +45,17 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="torneos"
+        options={{
+          title: "Torneos",
+          tabBarIcon: ({ color, size }) => <Ionicons name="trophy-outline" size={size} color={color} />,
+        }}
+      />
+
+      <Tabs.Screen
         name="ranking"
         options={{
-          title: "Ranking",
+          title: "Premios",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="podium-outline" size={size} color={color} />
           ),
@@ -65,9 +73,7 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="configuracion"
-        options={{ title: "Configuración", tabBarIcon: ({ color, size }) => (
-          <Ionicons name="settings-outline" size={size} color={color} />
-        ) }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="administracion"

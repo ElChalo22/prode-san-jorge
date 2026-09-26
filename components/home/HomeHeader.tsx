@@ -12,10 +12,11 @@ type Props = {
   unreadCount: number;
   openGames: number;
   onNotifications: () => void;
+  onSettings?: () => void;
   onAdmin?: () => void;
 };
 
-export default function HomeHeader({ username, unreadCount, openGames, onNotifications, onAdmin }: Props) {
+export default function HomeHeader({ username, unreadCount, openGames, onNotifications, onSettings, onAdmin }: Props) {
   const { isDark } = useAppAppearance();
   const colors = isDark ? darkColors : lightColors;
   return (
@@ -32,6 +33,10 @@ export default function HomeHeader({ username, unreadCount, openGames, onNotific
         </View>
 
         <View style={styles.actions}>
+          {onSettings && <Pressable accessibilityLabel="Configuración" onPress={onSettings}
+            style={[styles.notificationButton, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Ionicons name="settings-outline" size={21} color={colors.text.primary} />
+          </Pressable>}
           <Pressable accessibilityLabel="Ver notificaciones" onPress={onNotifications}
             style={[styles.notificationButton, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Ionicons name="notifications-outline" size={22} color={colors.text.primary} />

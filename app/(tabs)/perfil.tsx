@@ -2,11 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useAppAppearance } from "../../lib/appearance";
 import { supabase } from "../../lib/supabase";
 import { darkColors, lightColors } from "../../theme/colors";
-import { useAppAppearance } from "../../lib/appearance";
+import { uploadImage } from "../../lib/userUploads";
 
-type Profile = { username: string | null; full_name: string | null; avatar_url: string | null; favorite_team_id: string | null };
+type Profile = { username: string | null; full_name: string | null; avatar_url: string | null; favorite_team_id: string | null; avatar_changed_at: string | null };
 type FavoriteTeam = { id: string; name: string; logo_url: string | null };
 type Participation = {
   id: string;
@@ -16,7 +17,6 @@ type Participation = {
   prode_games: { name: string } | { name: string }[] | null;
 };
 
-const REWARD_MILESTONES = [50, 125] as const;
 
 export default function PerfilScreen() {
   const { isDark } = useAppAppearance();
@@ -27,6 +27,7 @@ export default function PerfilScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signedIn, setSignedIn] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [favoriteTeam, setFavoriteTeam] = useState<FavoriteTeam | null>(null);
   const load = useCallback(async () => {
     try {
@@ -43,7 +44,7 @@ export default function PerfilScreen() {
       const userId = auth.session.user.id;
       setSignedIn(true);
       const [profileResult, participationResult] = await Promise.all([
-        supabase.from("profiles").select("username, full_name, avatar_url, favorite_team_id").eq("id", userId).single(),
+        supabase.from("profiles").select("username, full_name, avatar_url, avatar_changed_at, favorite_team_id").eq("id", userId).single(),
         supabase.from("participations")
           .select("id, status, hits, processed_matches, prode_games(name)")
           .eq("user_id", userId).order("created_at", { ascending: false }).limit(1000),
@@ -66,6 +67,35 @@ export default function PerfilScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
+  const changeAvatar = async () => {
+    if (!profile || uploadingAvatar) return;
+    if (profile.avatar_changed_at) {
+      const next = new Date(profile.avatar_changed_at).getTime() + 30 * 24 * 60 * 60 * 1000;
+      if (Date.now() < next) {
+        Alert.alert("Foto de perfil", `Podrás modificarla nuevamente el ${new Date(next).toLocaleDateString("es-AR")}.`);
+        return;
+      }
+    }
+    Alert.alert("Foto de perfil", "Podés modificarla una vez cada 30 días. ¿Querés elegir una foto?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Elegir foto", onPress: () => void (async () => {
+        try {
+          setUploadingAvatar(true);
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) throw new Error("Iniciá sesión para modificar la foto.");
+          const path = await uploadImage("profile-avatars", user.id);
+          if (!path) return;
+          const { data } = supabase.storage.from("profile-avatars").getPublicUrl(path);
+          const { error: uploadError } = await supabase.rpc("set_my_avatar", { object_path: path, public_url: data.publicUrl });
+          if (uploadError) throw uploadError;
+          await load();
+          Alert.alert("Foto actualizada", "Podrás volver a modificarla dentro de 30 días.");
+        } catch (caught) { Alert.alert("No se pudo actualizar", caught instanceof Error ? caught.message : "Intentá nuevamente."); }
+        finally { setUploadingAvatar(false); }
+      })() },
+    ]);
+  };
+
   const signOut = () => Alert.alert("Cerrar sesión", "¿Querés salir de tu cuenta?", [
     { text: "Cancelar", style: "cancel" },
     { text: "Cerrar sesión", style: "destructive", onPress: async () => {
@@ -79,11 +109,6 @@ export default function PerfilScreen() {
   const displayParticipations = participations;
   const confirmed = displayParticipations.filter((item) => item.status === "confirmed");
   const totalHits = confirmed.reduce((sum, item) => sum + (item.hits ?? 0), 0);
-  const nextMilestone = REWARD_MILESTONES.find((target) => totalHits < target);
-  const previousMilestone = nextMilestone === 125 ? 50 : 0;
-  const rewardProgress = nextMilestone
-    ? Math.max(0, Math.min(1, (totalHits - previousMilestone) / (nextMilestone - previousMilestone)))
-    : 1;
   const username = displayProfile?.username?.trim() || "Jugador";
 
   return (
@@ -109,10 +134,14 @@ export default function PerfilScreen() {
       ) : null}
       {displayProfile ? <>
         <View style={[styles.hero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.avatar, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Pressable accessibilityLabel="Editar foto de perfil" onPress={() => void changeAvatar()}
+            style={[styles.avatar, { backgroundColor: colors.background, borderColor: colors.border }]}>
             {displayProfile.avatar_url ? <Image source={{ uri: displayProfile.avatar_url }} style={styles.avatarImage} />
               : <Text style={[styles.initial, { color: colors.primary }]}>{username[0].toUpperCase()}</Text>}
-          </View>
+            <View style={[styles.pencil, { backgroundColor: colors.primary }]}>
+              <Ionicons name="pencil" size={15} color="#FFFFFF" />
+            </View>
+          </Pressable>
           <Text style={[styles.username, { color: colors.text.primary }]}>@{username}</Text>
           <Text style={[styles.hint, { color: colors.text.secondary }]}>Tu nombre público en el prode</Text>
           <View style={[styles.team, { backgroundColor: colors.background }]}>
@@ -129,32 +158,6 @@ export default function PerfilScreen() {
           <Text style={[styles.summaryCaption, { color: colors.text.secondary }]}>
             de {confirmed.length} {confirmed.length === 1 ? "prode jugado" : "prodes jugados"}
           </Text>
-        </View>
-        <View style={[styles.rewardsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.rewardsHeading}>
-            <Ionicons name="gift-outline" size={23} color={colors.primary} />
-            <Text style={[styles.rewardsTitle, { color: colors.text.primary }]}>Premios por aciertos</Text>
-          </View>
-          <Text style={[styles.rewardsDescription, { color: colors.text.secondary }]}>
-            {nextMilestone
-              ? `Te faltan ${nextMilestone - totalHits} aciertos para llegar a ${nextMilestone}.`
-              : "Alcanzaste todas las metas anunciadas."}
-          </Text>
-          <View style={[styles.rewardTrack, { backgroundColor: colors.background }]}>
-            <View style={[styles.rewardFill, { width: `${rewardProgress * 100}%`, backgroundColor: colors.primary }]} />
-          </View>
-          {REWARD_MILESTONES.map((target) => {
-            const reached = totalHits >= target;
-            return <View key={target} style={[styles.rewardRow, { borderTopColor: colors.border }]}>
-              <Ionicons name={reached ? "checkmark-circle" : "lock-closed-outline"} size={21} color={reached ? colors.primary : colors.text.secondary} />
-              <View style={styles.rowName}>
-                <Text style={[styles.rewardName, { color: colors.text.primary }]}>{target} aciertos</Text>
-                <Text style={[styles.rewardDetail, { color: colors.text.secondary }]}>
-                  {reached ? "Meta alcanzada" : "Premio por anunciar"}
-                </Text>
-              </View>
-            </View>;
-          })}
         </View>
         <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Mis fechas</Text>
         {displayParticipations.length === 0 ? <Text style={[styles.message, { color: colors.text.secondary }]}>Todavía no participaste en ningún prode.</Text>
@@ -191,6 +194,7 @@ const styles = StyleSheet.create({
   content: { paddingTop: 58, paddingHorizontal: 20, paddingBottom: 120, gap: 14 },
   title: { fontSize: 32, fontWeight: "900", marginBottom: 4 },
   hero: { borderWidth: 1, borderRadius: 22, padding: 22, alignItems: "center" },
+  pencil: { position: "absolute", bottom: 0, right: 0, width: 27, height: 27, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   avatar: { width: 86, height: 86, borderRadius: 43, borderWidth: 1, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   avatarImage: { width: "100%", height: "100%" },
   initial: { fontSize: 38, fontWeight: "900" },

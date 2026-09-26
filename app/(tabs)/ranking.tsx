@@ -1,827 +1,130 @@
+import { Ionicons } from "@expo/vector-icons";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAppAppearance } from "../../lib/appearance";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-
 import { supabase } from "../../lib/supabase";
-
-type ProdeGame = {
-  id: string;
-  name: string;
-  status: string;
-  closes_at: string;
-};
-
-type ParticipationRow = {
-  id: string;
-  user_id: string;
-  hits: number | null;
-  processed_matches: number | null;
-};
-
-type ProfileRow = {
-  id: string;
-  username: string | null;
-  avatar_url: string | null;
-};
-
-type RankingEntry = {
-  id: string;
-  userId: string;
-  username: string;
-  avatarUrl: string | null;
-  hits: number;
-  processedMatches: number;
-  position: number;
-};
-
-const COLORS = {
-  light: {
-    background: "#F4F6F8",
-    card: "#FFFFFF",
-    cardSecondary: "#F8FAFC",
-    text: "#111827",
-    muted: "#6B7280",
-    border: "#E5E7EB",
-    primary: "#2563EB",
-    primarySoft: "#DBEAFE",
-    podium: "#FFF7D6",
-    success: "#16A34A",
-    error: "#DC2626",
-  },
-  dark: {
-    background: "#090E18",
-    card: "#121A28",
-    cardSecondary: "#182233",
-    text: "#F8FAFC",
-    muted: "#94A3B8",
-    border: "#253247",
-    primary: "#60A5FA",
-    primarySoft: "#172B4D",
-    podium: "#332A13",
-    success: "#4ADE80",
-    error: "#F87171",
-  },
-};
-
-function formatProcessedMatches(value: number) {
-  if (value === 1) {
-    return "1 partido";
-  }
-
-  return `${value} partidos`;
-}
-
-function getPositionLabel(position: number) {
-  if (position === 1) {
-    return "🥇";
-  }
-
-  if (position === 2) {
-    return "🥈";
-  }
-
-  if (position === 3) {
-    return "🥉";
-  }
-
-  return String(position);
-}
+import { darkColors, lightColors } from "../../theme/colors";
+import type { DirectoryPlayer } from "../../lib/playerDirectory";
+type Tab = "premios" | "ranking" | "social";
 
 export default function RankingScreen() {
   const { isDark } = useAppAppearance();
-  const colors = isDark ? COLORS.dark : COLORS.light;
+  const colors = isDark ? darkColors : lightColors;
+  const [tab, setTab] = useState<Tab>("premios");
+  const [hits, setHits] = useState(0);
+  const [credits, setCredits] = useState<{ kind: string; redeemed_at: string | null }[]>([]);
+  const [cash, setCash] = useState<string | null>(null);
+  const [players, setPlayers] = useState<DirectoryPlayer[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const [games, setGames] = useState<ProdeGame[]>([]);
-  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
-  const [ranking, setRanking] = useState<RankingEntry[]>([]);
-
-  const [loadingGames, setLoadingGames] = useState(true);
-  const [loadingRanking, setLoadingRanking] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const selectedGame = useMemo(
-    () => games.find((game) => game.id === selectedGameId) ?? null,
-    [games, selectedGameId]
-  );
-
-  const loadGames = useCallback(async () => {
-    const { data, error: gamesError } = await supabase
-      .from("prode_games")
-      .select("id, name, status, closes_at")
-      .order("closes_at", { ascending: false })
-      .limit(10);
-
-    if (gamesError) {
-      throw gamesError;
-    }
-
-    const loadedGames = (data ?? []) as ProdeGame[];
-
-    setGames(loadedGames);
-
-    setSelectedGameId((currentGameId) => {
-      if (
-        currentGameId &&
-        loadedGames.some((game) => game.id === currentGameId)
-      ) {
-        return currentGameId;
-      }
-
-      return loadedGames[0]?.id ?? null;
-    });
+  const loadPlayers = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.rpc("public_player_directory");
+    if (!error) setPlayers((data ?? []) as DirectoryPlayer[]);
+    setLoading(false);
   }, []);
 
-  const loadRanking = useCallback(async (gameId: string) => {
-    setLoadingRanking(true);
-    setError(null);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    void (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { if (active) { setHits(0); setCredits([]); setCash(null); } return; }
+      const [entries, bonuses, claim] = await Promise.all([
+        supabase.from("participations").select("hits").eq("user_id", user.id).eq("status", "confirmed"),
+        supabase.from("reward_credits").select("kind,redeemed_at").eq("user_id", user.id),
+        supabase.from("reward_claims").select("status").eq("user_id", user.id).eq("milestone", 125).maybeSingle(),
+      ]);
+      if (!active) return;
+      setHits((entries.data ?? []).reduce((sum, row) => sum + (row.hits ?? 0), 0));
+      setCredits(bonuses.data ?? []);
+      setCash(claim.data?.status ?? null);
+    })();
+    void loadPlayers();
+    return () => { active = false; };
+  }, [loadPlayers]));
 
-    try {
-      const { data: participationData, error: participationError } =
-        await supabase
-          .from("participations")
-          .select("id, user_id, hits, processed_matches")
-          .eq("prode_game_id", gameId)
-          .eq("status", "confirmed")
-          .order("hits", { ascending: false })
-          .order("processed_matches", { ascending: false });
+  const visiblePlayers = useMemo(() => {
+    const normalized = query.trim().replace(/^@/, "").toLocaleLowerCase("es");
+    if (!normalized) return players;
+    return players.filter((player) => player.username.toLocaleLowerCase("es").includes(normalized));
+  }, [players, query]);
+  const argentina = credits.find((credit) => credit.kind === "argentina");
+  const express = credits.find((credit) => credit.kind === "express");
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "premios", label: "Premios" }, { id: "ranking", label: "Ranking" }, { id: "social", label: "Social" },
+  ];
 
-      if (participationError) {
-        throw participationError;
-      }
+  return <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={styles.content}>
+    <Text style={[styles.title, { color: colors.text.primary }]}>Ranking y premios</Text>
+    <View style={styles.tabs}>{tabs.map((item) => <Pressable key={item.id} onPress={() => setTab(item.id)}
+      style={[styles.tab, { backgroundColor: tab === item.id ? colors.primary : colors.surface, borderColor: colors.border }]}>
+      <Text style={{ color: tab === item.id ? "#FFFFFF" : colors.text.primary, fontWeight: "800" }}>{item.label}</Text>
+    </Pressable>)}</View>
 
-      const participations =
-        (participationData ?? []) as ParticipationRow[];
-
-      if (participations.length === 0) {
-        setRanking([]);
-        return;
-      }
-
-      const userIds = [...new Set(participations.map((row) => row.user_id))];
-
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, username, avatar_url")
-        .in("id", userIds);
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      const profiles = (profileData ?? []) as ProfileRow[];
-
-      const profileById = new Map(
-        profiles.map((profile) => [profile.id, profile])
-      );
-
-      const sortedParticipants = [...participations].sort((a, b) => {
-        const hitsDifference = (b.hits ?? 0) - (a.hits ?? 0);
-
-        if (hitsDifference !== 0) {
-          return hitsDifference;
-        }
-
-        return (
-          (b.processed_matches ?? 0) - (a.processed_matches ?? 0)
-        );
-      });
-
-      let previousHits: number | null = null;
-      let previousPosition = 0;
-
-      const mappedRanking: RankingEntry[] = sortedParticipants.map(
-        (participation, index) => {
-          const hits = participation.hits ?? 0;
-          const profile = profileById.get(participation.user_id);
-
-          const position =
-            previousHits === hits ? previousPosition : index + 1;
-
-          previousHits = hits;
-          previousPosition = position;
-
-          return {
-            id: participation.id,
-            userId: participation.user_id,
-            username:
-              profile?.username?.trim() ||
-              `Jugador ${index + 1}`,
-            avatarUrl: profile?.avatar_url ?? null,
-            hits,
-            processedMatches:
-              participation.processed_matches ?? 0,
-            position,
-          };
-        }
-      );
-
-      setRanking(mappedRanking);
-    } catch (caughtError) {
-      console.error("Error al cargar el ranking:", caughtError);
-
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "No se pudo cargar el ranking."
-      );
-
-      setRanking([]);
-    } finally {
-      setLoadingRanking(false);
-    }
-  }, []);
-
-  const loadInitialData = useCallback(async () => {
-    setLoadingGames(true);
-    setError(null);
-
-    try {
-      await loadGames();
-    } catch (caughtError) {
-      console.error("Error al cargar los prodes:", caughtError);
-
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "No se pudieron cargar los prodes."
-      );
-    } finally {
-      setLoadingGames(false);
-    }
-  }, [loadGames]);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    setError(null);
-
-    try {
-      await loadGames();
-
-      if (selectedGameId) {
-        await loadRanking(selectedGameId);
-      }
-    } catch (caughtError) {
-      console.error("Error al actualizar el ranking:", caughtError);
-
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "No se pudo actualizar el ranking."
-      );
-    } finally {
-      setRefreshing(false);
-    }
-  }, [loadGames, loadRanking, selectedGameId]);
-
-  useEffect(() => {
-    void loadInitialData();
-  }, [loadInitialData]);
-
-  useEffect(() => {
-    if (!selectedGameId) {
-      setRanking([]);
-      return;
-    }
-
-    void loadRanking(selectedGameId);
-  }, [loadRanking, selectedGameId]);
-
-  useEffect(() => {
-    if (!selectedGameId) {
-      return;
-    }
-
-    const channel = supabase
-      .channel(`ranking-${selectedGameId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "participations",
-          filter: `prode_game_id=eq.${selectedGameId}`,
-        },
-        () => {
-          void loadRanking(selectedGameId);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [loadRanking, selectedGameId]);
-
-  const renderRankingEntry = ({
-    item,
-  }: {
-    item: RankingEntry;
-  }) => {
-    const isPodium = item.position <= 3;
-
-    return (
-      <View
-        style={[
-          styles.rankingCard,
-          {
-            backgroundColor: isPodium
-              ? colors.podium
-              : colors.card,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <View style={styles.positionContainer}>
-          <Text
-            style={[
-              styles.positionText,
-              { color: colors.text },
-            ]}
-          >
-            {getPositionLabel(item.position)}
-          </Text>
-        </View>
-
-        <View
-          style={[
-            styles.avatar,
-            {
-              backgroundColor: colors.primarySoft,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          {item.avatarUrl ? (
-            <Image
-              source={{ uri: item.avatarUrl }}
-              style={styles.avatarImage}
-            />
-          ) : (
-            <Text
-              style={[
-                styles.avatarText,
-                { color: colors.primary },
-              ]}
-            >
-              {item.username.charAt(0).toUpperCase()}
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.playerInformation}>
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.username,
-              { color: colors.text },
-            ]}
-          >
-            {item.username}
-          </Text>
-
-          <Text
-            style={[
-              styles.processedMatches,
-              { color: colors.muted },
-            ]}
-          >
-            {formatProcessedMatches(item.processedMatches)}
-          </Text>
-        </View>
-
-        <View style={styles.hitsContainer}>
-          <Text
-            style={[
-              styles.hitsNumber,
-              { color: colors.success },
-            ]}
-          >
-            {item.hits}
-          </Text>
-
-          <Text
-            style={[
-              styles.hitsLabel,
-              { color: colors.muted },
-            ]}
-          >
-            aciertos
-          </Text>
-        </View>
+    {tab === "premios" && <>
+      <Text style={{ color: colors.text.secondary }}>Tus aciertos confirmados se acumulan entre los prodes que jugás.</Text>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Ionicons name="football-outline" size={28} color={colors.primary} />
+        <Text style={[styles.number, { color: colors.text.primary }]}>{hits} aciertos</Text>
+        <Text style={{ color: colors.text.secondary }}>Tus aciertos acumulados</Text>
       </View>
-    );
-  };
-
-  if (loadingGames) {
-    return (
-      <View
-        style={[
-          styles.centeredContainer,
-          { backgroundColor: colors.background },
-        ]}
-      >
-        <ActivityIndicator
-          size="large"
-          color={colors.primary}
-        />
-
-        <Text
-          style={[
-            styles.loadingText,
-            { color: colors.muted },
-          ]}
-        >
-          Cargando ranking...
-        </Text>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.heading, { color: colors.text.primary }]}>55 aciertos</Text>
+        <Text style={{ color: colors.text.secondary }}>Una participación gratis en Liga Argentina, por única vez.</Text>
+        <Text style={{ color: colors.primary, fontWeight: "800" }}>{argentina?.redeemed_at ? "Beneficio usado" : argentina ? "Disponible para jugar" : `${Math.max(0, 55 - hits)} aciertos para llegar`}</Text>
       </View>
-    );
-  }
-
-  return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: colors.background },
-      ]}
-    >
-      <View style={styles.header}>
-        <Text
-          style={[
-            styles.title,
-            { color: colors.text },
-          ]}
-        >
-          Ranking
-        </Text>
-
-        <Text
-          style={[
-            styles.subtitle,
-            { color: colors.muted },
-          ]}
-        >
-          La tabla se actualiza automáticamente con cada resultado.
-        </Text>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.heading, { color: colors.text.primary }]}>125 aciertos</Text>
+        <Text style={{ color: colors.text.secondary }}>Premio de ARS 25.000. El equipo coordinará el pago.</Text>
+        <Text style={{ color: colors.primary, fontWeight: "800" }}>{cash === "paid" ? "Premio pagado" : cash === "pending" ? "Premio pendiente de pago" : `${Math.max(0, 125 - hits)} aciertos para llegar`}</Text>
       </View>
+      {express && <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.heading, { color: colors.text.primary }]}>Verificación de identidad</Text>
+        <Text style={{ color: colors.primary }}>{express.redeemed_at ? "Entrada Express usada" : "Entrada Express gratis disponible"}</Text>
+      </View>}
+    </>}
 
-      {games.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.gameSelector}
-        >
-          {games.map((game) => {
-            const isSelected = game.id === selectedGameId;
+    {tab === "ranking" && <>
+      <Text style={{ color: colors.text.secondary }}>Jugadores ordenados por aciertos acumulados.</Text>
+      {loading && <ActivityIndicator color={colors.primary} />}
+      {visiblePlayers.map((player, index) => <PlayerRow key={player.id} player={player} position={index + 1} colors={colors} onPress={() => router.push(`/players/${player.id}`)} />)}
+      {!loading && players.length === 0 && <Text style={{ color: colors.text.secondary }}>Todavía no hay jugadores en el ranking.</Text>}
+    </>}
 
-            return (
-              <Pressable
-                key={game.id}
-                onPress={() => setSelectedGameId(game.id)}
-                style={[
-                  styles.gameButton,
-                  {
-                    backgroundColor: isSelected
-                      ? colors.primary
-                      : colors.card,
-                    borderColor: isSelected
-                      ? colors.primary
-                      : colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.gameButtonText,
-                    {
-                      color: isSelected
-                        ? "#FFFFFF"
-                        : colors.text,
-                    },
-                  ]}
-                >
-                  {game.name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      ) : null}
-
-      {selectedGame ? (
-        <View
-          style={[
-            styles.selectedGameCard,
-            {
-              backgroundColor: colors.cardSecondary,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.selectedGameName,
-              { color: colors.text },
-            ]}
-          >
-            {selectedGame.name}
-          </Text>
-
-          <Text
-            style={[
-              styles.selectedGameStatus,
-              { color: colors.muted },
-            ]}
-          >
-            {ranking.length} participantes confirmados
-          </Text>
-        </View>
-      ) : null}
-
-      {error ? (
-        <View
-          style={[
-            styles.messageCard,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.errorText,
-              { color: colors.error },
-            ]}
-          >
-            {error}
-          </Text>
-
-          <Pressable
-            onPress={() => void handleRefresh()}
-            style={[
-              styles.retryButton,
-              { backgroundColor: colors.primary },
-            ]}
-          >
-            <Text style={styles.retryButtonText}>
-              Reintentar
-            </Text>
-          </Pressable>
-        </View>
-      ) : loadingRanking ? (
-        <View style={styles.rankingLoader}>
-          <ActivityIndicator
-            size="large"
-            color={colors.primary}
-          />
-        </View>
-      ) : (
-        <FlatList
-          data={ranking}
-          keyExtractor={(item) => item.id}
-          renderItem={renderRankingEntry}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.listContent,
-            ranking.length === 0 && styles.emptyListContent,
-          ]}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void handleRefresh()}
-              tintColor={colors.primary}
-              colors={[colors.primary]}
-            />
-          }
-          ListEmptyComponent={
-            <View
-              style={[
-                styles.messageCard,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Text style={styles.emptyIcon}>🏆</Text>
-
-              <Text
-                style={[
-                  styles.emptyTitle,
-                  { color: colors.text },
-                ]}
-              >
-                Todavía no hay posiciones
-              </Text>
-
-              <Text
-                style={[
-                  styles.emptyText,
-                  { color: colors.muted },
-                ]}
-              >
-                El ranking aparecerá cuando haya participantes
-                confirmados en este prode.
-              </Text>
-            </View>
-          }
-        />
-      )}
-    </View>
-  );
+    {tab === "social" && <>
+      <Text style={{ color: colors.text.secondary }}>Buscá a alguien por su apodo y visitá su perfil.</Text>
+      <View style={[styles.search, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Ionicons name="search-outline" size={20} color={colors.text.secondary} />
+        <TextInput value={query} onChangeText={setQuery} placeholder="Buscar jugadores" placeholderTextColor={colors.text.secondary}
+          autoCapitalize="none" style={{ flex: 1, color: colors.text.primary, paddingVertical: 9 }} />
+      </View>
+      {loading && <ActivityIndicator color={colors.primary} />}
+      {visiblePlayers.map((player) => <PlayerRow key={player.id} player={player} colors={colors} onPress={() => router.push(`/players/${player.id}`)} />)}
+      {!loading && visiblePlayers.length === 0 && <Text style={{ color: colors.text.secondary }}>No encontramos jugadores con ese apodo.</Text>}
+    </>}
+  </ScrollView>;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingTop: 58,
-  },
-  centeredContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  header: {
-    paddingHorizontal: 20,
-    marginBottom: 18,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "900",
-  },
-  subtitle: {
-    marginTop: 5,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  gameSelector: {
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  gameButton: {
-    maxWidth: 220,
-    minHeight: 42,
-    justifyContent: "center",
-    paddingHorizontal: 17,
-    borderRadius: 21,
-    borderWidth: 1,
-  },
-  gameButtonText: {
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  selectedGameCard: {
-    marginHorizontal: 20,
-    marginBottom: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    borderRadius: 15,
-    borderWidth: 1,
-  },
-  selectedGameName: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  selectedGameStatus: {
-    marginTop: 3,
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  rankingLoader: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  listContent: {
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingTop: 4,
-    paddingBottom: 120,
-  },
-  emptyListContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-  },
-  rankingCard: {
-    minHeight: 76,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 17,
-    borderWidth: 1,
-  },
-  positionContainer: {
-    width: 42,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  positionText: {
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    borderWidth: 1,
-  },
-  avatarImage: {
-    width: "100%",
-    height: "100%",
-  },
-  avatarText: {
-    fontSize: 19,
-    fontWeight: "900",
-  },
-  playerInformation: {
-    flex: 1,
-    marginLeft: 12,
-    marginRight: 8,
-  },
-  username: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  processedMatches: {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  hitsContainer: {
-    minWidth: 66,
-    alignItems: "flex-end",
-  },
-  hitsNumber: {
-    fontSize: 23,
-    fontWeight: "900",
-  },
-  hitsLabel: {
-    marginTop: -2,
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  messageCard: {
-    marginHorizontal: 20,
-    padding: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 18,
-    borderWidth: 1,
-  },
-  emptyIcon: {
-    marginBottom: 10,
-    fontSize: 38,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  emptyText: {
-    maxWidth: 290,
-    marginTop: 7,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-  },
-  errorText: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  retryButton: {
-    marginTop: 14,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  retryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "800",
-  },
+function PlayerRow({ player, position, colors, onPress }: { player: DirectoryPlayer; position?: number; colors: typeof lightColors; onPress: () => void }) {
+  return <Pressable onPress={onPress} style={[styles.player, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    {position !== undefined && <Text style={[styles.position, { color: colors.primary }]}>{position}</Text>}
+    {player.avatar_url ? <Image source={{ uri: player.avatar_url }} style={styles.avatar} /> : <Ionicons name="person-circle-outline" size={43} color={colors.primary} />}
+    <View style={{ flex: 1, gap: 2 }}>
+      <Text style={{ color: colors.text.primary, fontWeight: "800" }}>@{player.username}</Text>
+      <Text style={{ color: colors.text.secondary, fontSize: 12 }}>{player.team_name ?? "Club sin elegir"}</Text>
+    </View>
+    <Text style={{ color: colors.primary, fontWeight: "900" }}>{player.hits} aciertos</Text>
+    <Ionicons name="chevron-forward" size={17} color={colors.text.secondary} />
+  </Pressable>;
+}
+
+const styles = StyleSheet.create({ content: { paddingHorizontal: 20, paddingTop: 58, paddingBottom: 130, gap: 16 },
+  title: { fontSize: 31, fontWeight: "900" }, tabs: { flexDirection: "row", gap: 8 },
+  tab: { flex: 1, alignItems: "center", borderWidth: 1, borderRadius: 12, paddingVertical: 11 },
+  card: { borderRadius: 18, borderWidth: 1, padding: 18, gap: 7 }, number: { fontSize: 26, fontWeight: "900" },
+  heading: { fontSize: 20, fontWeight: "900" }, search: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 9 },
+  player: { borderWidth: 1, borderRadius: 15, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+  position: { width: 22, fontWeight: "900", textAlign: "center" }, avatar: { width: 40, height: 40, borderRadius: 20 },
 });
