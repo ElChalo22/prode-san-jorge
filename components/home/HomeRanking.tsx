@@ -5,7 +5,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { lightColors, spacing } from "../../theme";
 import Card from "../common/Card";
 
-type RankingRow = { username: string; hits: number; position: number; game_name: string };
+type RankingRow = { username: string; hits: number; rank_position: number; game_name: string };
 
 export default function HomeRanking({ ranking }: { ranking: RankingRow[] }) {
   return (
@@ -18,11 +18,11 @@ export default function HomeRanking({ ranking }: { ranking: RankingRow[] }) {
         {ranking.length === 0 && <Text style={styles.empty}>Todavía no hay una fecha con resultados.</Text>}
         {ranking.map((player) => (
           <View
-            key={`${player.position}-${player.username}`}
+            key={`${player.rank_position}-${player.username}`}
             style={styles.row}
           >
             <Text style={styles.position}>
-              #{player.position}
+              #{player.rank_position}
             </Text>
 
             <Text style={styles.username}>

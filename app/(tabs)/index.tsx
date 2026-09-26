@@ -20,7 +20,7 @@ import { supabase } from "../../lib/supabase";
 import { lightColors } from "../../theme";
 import { toHomeProdeCard } from "../../utils/homeProdeCard";
 
-type RankingRow = { game_name: string; username: string; hits: number; position: number };
+type RankingRow = { game_name: string; username: string; hits: number; rank_position: number };
 type PlayerStats = { played: number | null; hits: number | null; wins: number | null; won: number | null };
 
 export default function HomeScreen() {
