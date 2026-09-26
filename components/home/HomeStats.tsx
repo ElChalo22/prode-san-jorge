@@ -12,36 +12,39 @@ type Stat = {
   value: string;
 };
 
-const stats: Stat[] = [
+type Props = { played: number | null; wins: number | null; hits: number | null; won: number | null };
+
+export default function HomeStats({ played, wins, hits, won }: Props) {
+  const stats: Stat[] = [
   {
     icon: "football-outline",
     title: "Prodes jugados",
-    value: "18",
+    value: played === null ? "—" : String(played),
   },
   {
     icon: "trophy-outline",
     title: "Fechas ganadas",
-    value: "3",
+    value: wins === null ? "—" : String(wins),
   },
   {
     icon: "checkmark-circle-outline",
     title: "Aciertos",
-    value: "146",
+    value: hits === null ? "—" : String(hits),
   },
   {
     icon: "cash-outline",
     title: "Ganado",
-    value: "$540.000",
+    value: won === null ? "—" : `ARS ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }).format(won)}`,
   },
 ];
 
-export default function HomeStats() {
   return (
     <>
       <Text style={styles.title}>
         Tus estadísticas
       </Text>
 
+      {played === null && <Text style={styles.guest}>Iniciá sesión para ver tus estadísticas.</Text>}
       <View style={styles.grid}>
         {stats.map((item) => (
           <Card key={item.title} style={styles.card}>
@@ -66,6 +69,7 @@ export default function HomeStats() {
 }
 
 const styles = StyleSheet.create({
+  guest: { color: lightColors.text.secondary, marginBottom: spacing.md },
   title: {
     fontSize: 22,
     fontWeight: "800",

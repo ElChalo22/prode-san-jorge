@@ -1,15 +1,16 @@
 // CMP-003
 
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { lightColors, radius, spacing } from "../../theme";
 
 type Props = {
   username: string;
+  latestNotice?: string | null;
 };
 
-export default function HomeHeader({ username }: Props) {
+export default function HomeHeader({ username, latestNotice }: Props) {
   return (
     <>
       <View style={styles.header}>
@@ -23,14 +24,16 @@ export default function HomeHeader({ username }: Props) {
           </Text>
         </View>
 
-        <Pressable style={styles.notificationButton}>
+        <Pressable style={styles.notificationButton} onPress={() => {
+          if (latestNotice) Alert.alert("Aviso de tu prode", latestNotice);
+        }}>
           <Ionicons
             name="notifications-outline"
             size={22}
             color={lightColors.text.primary}
           />
 
-          <View style={styles.dot} />
+          {latestNotice && <View style={styles.dot} />}
         </Pressable>
       </View>
 

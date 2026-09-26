@@ -5,25 +5,9 @@ import { StyleSheet, Text, View } from "react-native";
 import { lightColors, spacing } from "../../theme";
 import Card from "../common/Card";
 
-const ranking = [
-  {
-    position: 1,
-    username: "ElTano22",
-    hits: 12,
-  },
-  {
-    position: 2,
-    username: "MarceGol",
-    hits: 11,
-  },
-  {
-    position: 3,
-    username: "Fede10",
-    hits: 10,
-  },
-];
+type RankingRow = { username: string; hits: number; position: number; game_name: string };
 
-export default function HomeRanking() {
+export default function HomeRanking({ ranking }: { ranking: RankingRow[] }) {
   return (
     <>
       <Text style={styles.title}>
@@ -31,9 +15,10 @@ export default function HomeRanking() {
       </Text>
 
       <Card>
+        {ranking.length === 0 && <Text style={styles.empty}>Todavía no hay una fecha con resultados.</Text>}
         {ranking.map((player) => (
           <View
-            key={player.position}
+            key={`${player.position}-${player.username}`}
             style={styles.row}
           >
             <Text style={styles.position}>
@@ -55,6 +40,7 @@ export default function HomeRanking() {
 }
 
 const styles = StyleSheet.create({
+  empty: { color: lightColors.text.secondary, paddingVertical: spacing.md },
   title: {
     fontSize: 22,
     fontWeight: "800",
