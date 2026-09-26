@@ -90,7 +90,6 @@ const TARGET_LEAGUE_ID = "hc";
 const SEARCH_DAYS_BEFORE = 4;
 const SEARCH_DAYS_AFTER = 4;
 const DOUBLE_CHANCE_LIMIT = 2;
-const ENTRY_FEE = 0;
 
 // =========================================================
 // FECHAS
@@ -579,6 +578,15 @@ async function upsertProdeGame(
   const groupId =
     await getArgentinaProdeGroupId();
 
+  const { data: settings, error: settingsError } = await supabase
+    .from("app_settings")
+    .select("argentina_entry_fee, argentina_payment_alias")
+    .limit(1).single();
+  if (settingsError) throw new Error(`Error leyendo precio de Liga Argentina: ${settingsError.message}`);
+  const entryFee = Number(settings.argentina_entry_fee);
+  const paymentAlias = settings.argentina_payment_alias?.trim() ?? "";
+  const configured = entryFee > 0 && paymentAlias.length > 0;
+
   const firstKickoff =
     parsePromiedosDateTime(
       games[0].start_time,
@@ -590,7 +598,7 @@ async function upsertProdeGame(
   ).toISOString();
 
   const status =
-    new Date(closesAt).getTime() > Date.now()
+    !configured ? "draft" : new Date(closesAt).getTime() > Date.now()
       ? "open"
       : "closed";
 
@@ -603,13 +611,18 @@ async function upsertProdeGame(
     );
 
   if (existingId) {
+    const { count, error: countError } = await supabase.from("participations")
+      .select("id", { head: true, count: "exact" }).eq("prode_game_id", existingId);
+    if (countError) throw countError;
     const { error } = await supabase
       .from("prode_games")
-      .update({
-        status,
+      .update(count ? {
         closes_at: closesAt,
-        double_chance_limit:
-          DOUBLE_CHANCE_LIMIT,
+        ...(new Date(closesAt).getTime() <= Date.now() ? { status: "closed" } : {}),
+      } : {
+        status, closes_at: closesAt, entry_fee: configured ? entryFee : 0,
+        payment_alias: configured ? paymentAlias : null,
+        double_chance_limit: DOUBLE_CHANCE_LIMIT,
       })
       .eq("id", existingId);
 
@@ -627,7 +640,8 @@ async function upsertProdeGame(
     .insert({
       prode_group_id: groupId,
       name,
-      entry_fee: ENTRY_FEE,
+      entry_fee: configured ? entryFee : 0,
+      payment_alias: configured ? paymentAlias : null,
       currency: "ARS",
       status,
       opens_at: new Date().toISOString(),

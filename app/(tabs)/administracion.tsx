@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
 import { supabase } from "../../lib/supabase";
 import { useStaffRole } from "../../lib/useStaffRole";
 import { darkColors, lightColors } from "../../theme/colors";
@@ -15,20 +15,37 @@ type Payment = {
 };
 type CatalogMatch = { id: string; competition_id: string; competition: string; round: string;
   home: string; away: string; kickoff_at: string };
+type ReviewGame = { name: string; entry_fee: number; game_type: string };
+type ReviewPayment = { status: string; amount: number; payment_receipts: { file_url: string }[] };
+type ReviewItem = { id: string; user_id: string; status: string; submitted_at: string | null;
+  prode_games: ReviewGame | ReviewGame[] | null; payments: ReviewPayment | ReviewPayment[] | null };
+type TeamName = { name: string };
+type ReviewMatch = { home_team: TeamName | TeamName[] | null; away_team: TeamName | TeamName[] | null };
+type ReviewPrediction = { prediction: string; secondary_prediction: string | null;
+  matches: ReviewMatch | ReviewMatch[] | null };
+const one = <T,>(value: T | T[] | null): T | null => Array.isArray(value) ? value[0] ?? null : value;
 
 export default function AdministracionScreen() {
   const colors = useColorScheme() === "dark" ? darkColors : lightColors;
   const { role, loading: checkingRole } = useStaffRole();
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+  const [selectedReview, setSelectedReview] = useState<string | null>(null);
+  const [reviewPredictions, setReviewPredictions] = useState<ReviewPrediction[]>([]);
   const [games, setGames] = useState<{ id: string; name: string; status: string }[]>([]);
   const [players, setPlayers] = useState<{ id: string; username: string | null; role: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [section, setSection] = useState<"resumen" | "pagos" | "prodes" | "express" | "equipo">("resumen");
+  const [section, setSection] = useState<"resumen" | "pagos" | "prodes" | "argentina" | "express" | "equipo">("resumen");
   const [catalog, setCatalog] = useState<CatalogMatch[]>([]);
   const [chosen, setChosen] = useState<string[]>([]);
   const [expressName, setExpressName] = useState("");
+  const [expressDescription, setExpressDescription] = useState("");
+  const [expressFee, setExpressFee] = useState("");
+  const [transferAlias, setTransferAlias] = useState("");
+  const [argentinaFee, setArgentinaFee] = useState("");
+  const [argentinaAlias, setArgentinaAlias] = useState("");
   const [matchQuery, setMatchQuery] = useState("");
   const [loadingCatalog, setLoadingCatalog] = useState(false);
 
@@ -37,7 +54,7 @@ export default function AdministracionScreen() {
     setBusy(true);
     setError(null);
     try {
-      const [paymentResult, gameResult, profileResult] = await Promise.all([
+      const [paymentResult, gameResult, profileResult, reviewResult, settingsResult] = await Promise.all([
         supabase.from("payments")
           .select("id, amount, currency, status, participations(user_id, prode_games(name))")
           .order("created_at", { ascending: false }).limit(100),
@@ -45,13 +62,26 @@ export default function AdministracionScreen() {
           .order("created_at", { ascending: false }).limit(30),
         supabase.from("profiles").select("id, username, role")
           .order("created_at", { ascending: false }).limit(500),
+        supabase.from("participations")
+          .select("id, user_id, status, submitted_at, prode_games(name,entry_fee,game_type), payments(status,amount,payment_receipts(file_url))")
+          .eq("status", "payment_under_review").order("submitted_at", { ascending: false }).limit(100),
+        supabase.from("app_settings").select("argentina_entry_fee,argentina_payment_alias").limit(1).single(),
       ]);
       if (paymentResult.error) throw paymentResult.error;
       if (gameResult.error) throw gameResult.error;
       if (profileResult.error) throw profileResult.error;
+      if (reviewResult.error) throw reviewResult.error;
+      if (settingsResult.error) throw settingsResult.error;
       setPayments((paymentResult.data ?? []) as Payment[]);
       setGames(gameResult.data ?? []);
       setPlayers(profileResult.data ?? []);
+      setReviewItems(((reviewResult.data ?? []) as unknown as ReviewItem[]).filter((item) => {
+        const game = one(item.prode_games);
+        return Number(game?.entry_fee) > 0
+          && one(item.payments)?.status === "uploaded";
+      }));
+      setArgentinaFee(String(settingsResult.data.argentina_entry_fee || ""));
+      setArgentinaAlias(settingsResult.data.argentina_payment_alias ?? "");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo cargar el panel.");
     } finally {
@@ -83,8 +113,9 @@ export default function AdministracionScreen() {
   };
 
   const publishExpress = async () => {
-    if (chosen.length < 1 || !expressName.trim()) {
-      Alert.alert("Faltan datos", "Poné un nombre y elegí al menos un partido.");
+    const fee = Number(expressFee.replace(",", "."));
+    if (chosen.length < 1 || !expressName.trim() || !Number.isFinite(fee) || fee <= 0 || !transferAlias.trim()) {
+      Alert.alert("Faltan datos", "Ingresá nombre, precio, alias de cobro y al menos un partido.");
       return;
     }
     setBusy(true);
@@ -97,18 +128,64 @@ export default function AdministracionScreen() {
       setBusy(false);
       return;
     }
-    const { error: publishError } = await supabase.rpc("create_express_game", {
-      game_name: expressName.trim(), selected_match_ids: prepared.match_ids, fee: 0,
+    const { error: publishError } = await supabase.rpc("create_paid_express", {
+      game_name: expressName.trim(), game_description: expressDescription.trim(),
+      selected_match_ids: prepared.match_ids, fee, transfer_alias: transferAlias.trim(),
     });
     if (publishError) setError(publishError.message);
     else {
       setChosen([]);
       setExpressName("");
+      setExpressDescription("");
+      setExpressFee("");
       setSection("prodes");
       Alert.alert("Prode Express publicado", "Ya está disponible para los jugadores.");
       await load();
     }
     setBusy(false);
+  };
+
+  const openReview = async (id: string) => {
+    if (selectedReview === id) { setSelectedReview(null); return; }
+    setError(null);
+    const { data, error: detailError } = await supabase.from("predictions")
+      .select("prediction, secondary_prediction, matches(home_team:teams!matches_home_team_id_fkey(name), away_team:teams!matches_away_team_id_fkey(name))")
+      .eq("participation_id", id);
+    if (detailError) { setError(detailError.message); return; }
+    setReviewPredictions((data ?? []) as unknown as ReviewPrediction[]);
+    setSelectedReview(id);
+  };
+
+  const reviewExpress = async (id: string, approve: boolean) => {
+    setBusy(true);
+    setError(null);
+    const { error: reviewError } = await supabase.rpc("review_paid_prode", {
+      target_participation_id: id, approve,
+    });
+    if (reviewError) setError(reviewError.message);
+    else { setSelectedReview(null); await load(); }
+    setBusy(false);
+  };
+
+  const saveArgentinaPayment = async () => {
+    const fee = Number(argentinaFee.replace(",", "."));
+    if (!Number.isFinite(fee) || fee <= 0 || !argentinaAlias.trim()) {
+      Alert.alert("Faltan datos", "Ingresá un precio y un alias válidos."); return;
+    }
+    setBusy(true); setError(null);
+    const { error: settingsError } = await supabase.rpc("configure_argentina_payment", {
+      new_fee: fee, new_alias: argentinaAlias.trim(),
+    });
+    if (settingsError) setError(settingsError.message);
+    else { Alert.alert("Configuración guardada", "Se aplicará a próximas fechas y a la actual si todavía nadie jugó."); await load(); }
+    setBusy(false);
+  };
+
+  const openReceipt = async (path: string) => {
+    const { data, error: receiptError } = await supabase.storage.from("prode-receipts")
+      .createSignedUrl(path, 60);
+    if (receiptError || !data?.signedUrl) { setError(receiptError?.message ?? "No se pudo abrir el comprobante."); return; }
+    await Linking.openURL(data.signedUrl);
   };
 
   if (checkingRole) return <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>;
@@ -118,7 +195,6 @@ export default function AdministracionScreen() {
     <Pressable onPress={() => router.replace("/(tabs)")}><Text style={{ color: colors.primary }}>Volver al inicio</Text></Pressable>
   </View>;
 
-  const pending = payments.filter((payment) => payment.status === "pending");
   const matches = players.filter((player) => player.username?.toLowerCase().includes(query.trim().toLowerCase()));
   const visibleMatches = catalog.filter((match) =>
     `${match.home} ${match.away} ${match.competition} ${match.round}`.toLocaleLowerCase("es")
@@ -146,11 +222,11 @@ export default function AdministracionScreen() {
     {error ? <Text style={{ color: colors.danger }}>{error}</Text> : null}
 
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sections}>
-      {(["resumen", "pagos", "prodes", "express", ...(role === "superadmin" ? ["equipo"] : [])] as typeof section[]).map((item) =>
+      {(["resumen", "pagos", "prodes", "argentina", "express", ...(role === "superadmin" ? ["equipo"] : [])] as typeof section[]).map((item) =>
         <Pressable key={item} onPress={() => { setSection(item); if (item === "express" && !catalog.length) void loadCatalog(); }} accessibilityRole="tab" accessibilityState={{ selected: section === item }}
           style={[styles.section, { backgroundColor: section === item ? colors.primary : colors.surface, borderColor: colors.border }]}>
           <Text style={{ color: section === item ? "#FFFFFF" : colors.text.primary, fontWeight: "700" }}>
-            {item === "resumen" ? "Resumen" : item === "pagos" ? "Pagos" : item === "prodes" ? "Prodes" : item === "express" ? "Crear Express" : "Equipo"}
+            {item === "resumen" ? "Resumen" : item === "pagos" ? "Revisión" : item === "prodes" ? "Prodes" : item === "argentina" ? "Liga Argentina" : item === "express" ? "Crear Express" : "Equipo"}
           </Text>
         </Pressable>)}
     </ScrollView>
@@ -158,8 +234,8 @@ export default function AdministracionScreen() {
     {section === "resumen" ? <>
     <View style={styles.stats}>
       <View style={[styles.card, styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.number, { color: colors.primary }]}>{pending.length}</Text>
-        <Text style={{ color: colors.text.secondary }}>Pagos pendientes</Text>
+        <Text style={[styles.number, { color: colors.primary }]}>{reviewItems.length}</Text>
+        <Text style={{ color: colors.text.secondary }}>Pronósticos por revisar</Text>
       </View>
       <View style={[styles.card, styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.number, { color: colors.primary }]}>{games.filter((game) => game.status === "open").length}</Text>
@@ -168,9 +244,9 @@ export default function AdministracionScreen() {
     </View>
     <Text style={[styles.heading, { color: colors.text.primary }]}>Para revisar</Text>
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <Text style={[styles.itemName, { color: colors.text.primary }]}>{pending.length === 0 ? "No hay pagos pendientes" : `${pending.length} pago${pending.length === 1 ? "" : "s"} pendiente${pending.length === 1 ? "" : "s"}`}</Text>
-      <Text style={{ color: colors.text.secondary }}>Consultá los movimientos en la sección Pagos.</Text>
-      <Pressable onPress={() => setSection("pagos")}><Text style={{ color: colors.primary, fontWeight: "700" }}>Ver pagos →</Text></Pressable>
+      <Text style={[styles.itemName, { color: colors.text.primary }]}>{reviewItems.length === 0 ? "No hay solicitudes por revisar" : `${reviewItems.length} solicitud${reviewItems.length === 1 ? "" : "es"} pendiente${reviewItems.length === 1 ? "" : "s"}`}</Text>
+      <Text style={{ color: colors.text.secondary }}>Revisá los comprobantes y pronósticos antes de confirmar la participación.</Text>
+      <Pressable onPress={() => setSection("pagos")}><Text style={{ color: colors.primary, fontWeight: "700" }}>Ver solicitudes →</Text></Pressable>
     </View>
     </> : null}
 
@@ -183,11 +259,35 @@ export default function AdministracionScreen() {
       </View>)}
     </> : null}
 
+    {section === "argentina" ? <>
+      <Text style={[styles.heading, { color: colors.text.primary }]}>Cobro de Liga Argentina</Text>
+      <Text style={{ color: colors.text.secondary }}>Configurá la entrada y el alias. La fecha se arma automáticamente con Promiedos; el precio se aplica a la fecha actual si todavía nadie participó y a las próximas.</Text>
+      <TextInput placeholder="Precio de entrada (ARS)" keyboardType="decimal-pad" placeholderTextColor={colors.text.secondary}
+        value={argentinaFee} onChangeText={setArgentinaFee}
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <TextInput placeholder="Alias para recibir transferencias" placeholderTextColor={colors.text.secondary}
+        value={argentinaAlias} onChangeText={setArgentinaAlias} autoCapitalize="none"
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <Pressable disabled={busy} onPress={() => void saveArgentinaPayment()}
+        style={[styles.button, { backgroundColor: colors.primary, alignItems: "center" }]}>
+        <Text style={styles.buttonText}>Guardar precio y alias</Text>
+      </Pressable>
+    </> : null}
+
     {section === "express" ? <>
       <Text style={[styles.heading, { color: colors.text.primary }]}>Nuevo Prode Express</Text>
-      <Text style={{ color: colors.text.secondary }}>Elegí partidos de Promiedos. Se publica al crearlo y cierra 15 minutos antes del primero. La Liga Argentina sigue automática. Por ahora, entrada gratis.</Text>
+      <Text style={{ color: colors.text.secondary }}>Elegí partidos de Promiedos, fijá el precio y el alias de cobro. Cierra 15 minutos antes del primer partido. La Liga Argentina sigue automática.</Text>
       <TextInput placeholder="Nombre, por ejemplo: Express del miércoles" placeholderTextColor={colors.text.secondary}
         value={expressName} onChangeText={setExpressName} maxLength={80}
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <TextInput placeholder="Descripción que se verá debajo del nombre" placeholderTextColor={colors.text.secondary}
+        value={expressDescription} onChangeText={setExpressDescription} maxLength={160}
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <TextInput placeholder="Precio de entrada (ARS)" keyboardType="decimal-pad" placeholderTextColor={colors.text.secondary}
+        value={expressFee} onChangeText={setExpressFee}
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <TextInput placeholder="Alias para recibir transferencias" placeholderTextColor={colors.text.secondary}
+        value={transferAlias} onChangeText={setTransferAlias} autoCapitalize="none"
         style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
       <TextInput placeholder="Buscar equipo, partido o competencia" placeholderTextColor={colors.text.secondary}
         value={matchQuery} onChangeText={setMatchQuery}
@@ -237,13 +337,35 @@ export default function AdministracionScreen() {
         </Pressable>;
       })}
       {visibleMatches.length > 80 ? <Text style={{ color: colors.text.secondary }}>Mostrando 80 partidos. Usá el buscador para encontrar otro.</Text> : null}
-      <Pressable disabled={busy || chosen.length < 1 || !expressName.trim()} onPress={() => void publishExpress()}
-        style={[styles.button, { backgroundColor: colors.primary, opacity: busy || chosen.length < 1 || !expressName.trim() ? 0.5 : 1, alignItems: "center", marginTop: 16 }]}>
+      <Pressable disabled={busy || chosen.length < 1 || !expressName.trim() || !expressFee.trim() || !transferAlias.trim()} onPress={() => void publishExpress()}
+        style={[styles.button, { backgroundColor: colors.primary, opacity: busy || chosen.length < 1 || !expressName.trim() || !expressFee.trim() || !transferAlias.trim() ? 0.5 : 1, alignItems: "center", marginTop: 16 }]}>
         <Text style={styles.buttonText}>Publicar Prode Express</Text>
       </Pressable>
     </> : null}
 
     {section === "pagos" ? <>
+    <Text style={[styles.heading, { color: colors.text.primary }]}>Pendientes de aprobación</Text>
+    {reviewItems.length === 0 ? <Text style={{ color: colors.text.secondary }}>No hay pagos pendientes de revisión.</Text> : null}
+    {reviewItems.map((item) => {
+      const player = players.find((candidate) => candidate.id === item.user_id);
+      return <View key={item.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.itemName, { color: colors.text.primary }]}>{one(item.prode_games)?.name ?? "Prode Express"} · @{player?.username ?? "jugador"}</Text>
+        <Text style={{ color: colors.text.secondary }}>Enviado {item.submitted_at ? new Date(item.submitted_at).toLocaleString("es-AR") : "recientemente"} · ARS {one(item.payments)?.amount}</Text>
+        <Pressable onPress={() => void openReview(item.id)}><Text style={{ color: colors.primary, fontWeight: "700" }}>{selectedReview === item.id ? "Ocultar pronósticos" : "Ver pronósticos"}</Text></Pressable>
+        {one(item.payments)?.payment_receipts?.[0]?.file_url ? <Pressable onPress={() => void openReceipt(one(item.payments)!.payment_receipts[0].file_url)}>
+          <Text style={{ color: colors.primary, fontWeight: "700" }}>Ver comprobante</Text>
+        </Pressable> : null}
+        {selectedReview === item.id ? <>
+          {reviewPredictions.map((prediction, index) => <Text key={index} style={{ color: colors.text.primary }}>
+            {one(one(prediction.matches)?.home_team ?? null)?.name ?? "Local"} vs. {one(one(prediction.matches)?.away_team ?? null)?.name ?? "Visitante"}: {prediction.prediction}{prediction.secondary_prediction ?? ""}
+          </Text>)}
+          <View style={styles.playerRow}>
+            <Pressable disabled={busy} onPress={() => void reviewExpress(item.id, true)} style={[styles.button, { backgroundColor: colors.primary }]}><Text style={styles.buttonText}>Aprobar</Text></Pressable>
+            <Pressable disabled={busy} onPress={() => void reviewExpress(item.id, false)} style={[styles.button, { backgroundColor: colors.danger }]}><Text style={styles.buttonText}>Rechazar</Text></Pressable>
+          </View>
+        </> : null}
+      </View>;
+    })}
     <Text style={[styles.heading, { color: colors.text.primary }]}>Pagos recientes</Text>
     {payments.length === 0 ? <Text style={{ color: colors.text.secondary }}>Todavía no hay pagos registrados.</Text> :
       payments.slice(0, 20).map((payment) => {
@@ -256,7 +378,7 @@ export default function AdministracionScreen() {
           <Text style={{ color: colors.text.secondary }}>{payment.amount} {payment.currency} · {payment.status === "pending" ? "Pendiente" : payment.status === "approved" ? "Aprobado" : payment.status === "rejected" ? "Rechazado" : payment.status}</Text>
         </View>;
       })}
-    <Text style={{ color: colors.text.secondary }}>La revisión de comprobantes y aprobación de pagos se incorporará en el siguiente paso.</Text>
+    <Text style={{ color: colors.text.secondary }}>La revisión de comprobantes para prodes pagos se incorporará en el siguiente paso.</Text>
     </> : null}
 
     {role === "superadmin" && section === "equipo" ? <>

@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import { decode } from "base64-arraybuffer";
+import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -58,6 +60,59 @@ export default function PronosticosScreen() {
   const [pronosticos, setPronosticos] = useState<
     Record<string, Prediction>
   >({});
+  const [paymentInfo, setPaymentInfo] = useState<{
+    participationId: string; status: string; deadline: string | null; amount: number;
+  } | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+
+  const loadPayment = async (selectedGameId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setPaymentInfo(null); return; }
+    const { data: participation } = await supabase.from("participations")
+      .select("id,status,payment_deadline").eq("prode_game_id", selectedGameId)
+      .eq("user_id", user.id).maybeSingle();
+    if (!participation) { setPaymentInfo(null); return; }
+    const { data: payment } = await supabase.from("payments")
+      .select("amount").eq("participation_id", participation.id).maybeSingle();
+    setPaymentInfo(payment ? { participationId: participation.id, status: participation.status,
+      deadline: participation.payment_deadline, amount: payment.amount } : null);
+  };
+
+  const attachReceipt = async () => {
+    if (!paymentInfo || !game) return;
+    if (paymentInfo.deadline && Date.now() >= new Date(paymentInfo.deadline).getTime()) {
+      Alert.alert("Plazo vencido", "Volvé a guardar tus pronósticos para iniciar un nuevo plazo de pago.");
+      return;
+    }
+    try {
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"],
+        allowsEditing: false, quality: 0.8, base64: true });
+      if (picked.canceled) return;
+      const asset = picked.assets[0];
+      if (!asset?.base64) throw new Error("No pudimos leer la imagen seleccionada.");
+      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
+        Alert.alert("Archivo demasiado grande", "Elegí una imagen de hasta 5 MB."); return;
+      }
+      setUploadingReceipt(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Iniciá sesión para enviar el comprobante.");
+      const mime = asset.mimeType === "image/png" ? "image/png" :
+        asset.mimeType === "image/webp" ? "image/webp" : "image/jpeg";
+      const extension = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+      const path = `${user.id}/${paymentInfo.participationId}/${Date.now()}.${extension}`;
+      const { error: uploadError } = await supabase.storage.from("prode-receipts")
+        .upload(path, decode(asset.base64), { contentType: mime, upsert: false });
+      if (uploadError) throw uploadError;
+      const { error: submitError } = await supabase.rpc("submit_prode_receipt", {
+        target_participation_id: paymentInfo.participationId, object_path: path,
+      });
+      if (submitError) throw submitError;
+      await loadPayment(game.id);
+      Alert.alert("Comprobante enviado", "Tu pago quedó pendiente de aprobación por el administrador.");
+    } catch (receiptError) {
+      Alert.alert("No se pudo enviar", receiptError instanceof Error ? receiptError.message : "Intentá nuevamente.");
+    } finally { setUploadingReceipt(false); }
+  };
 
   useEffect(() => {
     if (!gameId) {
@@ -65,6 +120,7 @@ export default function PronosticosScreen() {
     }
 
     loadGame(gameId);
+    void loadPayment(gameId);
   }, [gameId, loadGame]);
 
   useEffect(() => {
@@ -291,9 +347,11 @@ export default function PronosticosScreen() {
         return;
       }
 
+      await loadPayment(gameId);
+
       Alert.alert(
-        "¡Pronósticos guardados!",
-        "Tus elecciones quedaron guardadas correctamente. Podrás modificarlas hasta el cierre de la fecha.",
+        "Pronósticos guardados",
+        "Transferí el importe y subí el comprobante dentro de los próximos 10 minutos para que el admin revise tu participación.",
       );
     } catch (saveError) {
       console.error(
@@ -620,6 +678,21 @@ export default function PronosticosScreen() {
                   : "Guardar pronósticos"}
               </Text>
             </Pressable>
+
+            {paymentInfo ? <View style={styles.progressCard}>
+              <Text style={styles.progressTitle}>Pago de la entrada</Text>
+              <Text style={styles.progressMessage}>ARS {paymentInfo.amount} · Alias: {game.payment_alias ?? "Consultá al administrador"}</Text>
+              {paymentInfo.status === "pending_payment" ? <>
+                <Text style={styles.progressMessage}>Subí el comprobante antes de {paymentInfo.deadline ? new Date(paymentInfo.deadline).toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" }) + " ARG" : "que venza el plazo"}.</Text>
+                <Pressable disabled={uploadingReceipt} onPress={() => void attachReceipt()} style={styles.saveButton}>
+                  <Text style={styles.saveButtonText}>{uploadingReceipt ? "Enviando…" : "Adjuntar comprobante"}</Text>
+                </Pressable>
+              </> : <Text style={styles.progressMessage}>
+                {paymentInfo.status === "payment_under_review" ? "Comprobante enviado: pendiente de aprobación."
+                  : paymentInfo.status === "confirmed" ? "Participación aprobada."
+                  : paymentInfo.status === "rejected" ? "Pago rechazado. Consultá al administrador." : "Pago pendiente."}
+              </Text>}
+            </View> : null}
 
             <Text style={styles.bottomMessage}>
               Podrás modificar tus elecciones hasta el

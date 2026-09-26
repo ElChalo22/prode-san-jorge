@@ -9,6 +9,7 @@ export interface HomeProdeCard {
   emoji: string;
   title: string;
   description: string;
+  entryFee: string;
   jackpot: string;
   players: number;
   countdown: string;

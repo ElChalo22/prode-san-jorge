@@ -1,4 +1,4 @@
-export type UserRole = "player" | "admin";
+export type UserRole = "player" | "admin" | "superadmin";
 
 export type MatchStatus =
   | "scheduled"
@@ -118,6 +118,8 @@ export interface ProdeGame {
   id: string;
   prode_group_id: string;
   name: string;
+  description: string | null;
+  game_type: "automatic" | "express";
   entry_fee: number;
   currency: string;
   status: GameStatus;

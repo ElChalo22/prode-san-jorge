@@ -85,5 +85,13 @@ export async function savePredictions({
     throw predictionsError;
   }
 
-  return participation;
+  const { error: reviewError } = await supabase.rpc("start_prode_payment", {
+    target_participation_id: participation.id,
+  });
+  if (reviewError) throw reviewError;
+
+  const { data: updatedParticipation, error: refreshError } = await supabase
+    .from("participations").select().eq("id", participation.id).single();
+  if (refreshError) throw refreshError;
+  return updatedParticipation;
 }

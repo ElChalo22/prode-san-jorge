@@ -31,6 +31,11 @@ export default function ProdeCard({ game, onPress }: Props) {
         </Text>
 
         <View style={styles.infoRow}>
+          <Text style={styles.label}>🎟️ Entrada</Text>
+          <Text style={styles.value}>{game.entryFee}</Text>
+        </View>
+
+        <View style={styles.infoRow}>
           <Text style={styles.label}>💰 Pozo</Text>
           <Text style={styles.value}>{game.jackpot}</Text>
         </View>

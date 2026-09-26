@@ -80,8 +80,10 @@ export function toHomeProdeCard(
     title: game.name,
 
     description:
-      game.prode_group.description ??
+      game.description ?? game.prode_group.description ??
       "Ingresá y completá tus pronósticos.",
+
+    entryFee: `${game.currency} ${game.entry_fee}`,
 
     jackpot: `${game.currency} 0`,
 
