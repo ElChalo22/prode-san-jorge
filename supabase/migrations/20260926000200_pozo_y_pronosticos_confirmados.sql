@@ -11,7 +11,7 @@ revoke all on function public.game_public_summary(uuid) from public;
 grant execute on function public.game_public_summary(uuid) to anon, authenticated;
 
 create function public.game_confirmed_picks(target_game_id uuid)
-returns table(participation_id uuid, username text, match_id uuid, prediction public.prediction_value, secondary_prediction public.prediction_value)
+returns table(participation_id uuid, username text, match_id uuid, prediction public.prediction_value, secondary_prediction text)
 language sql stable security definer set search_path = '' as $$
   select p.id, coalesce(nullif(prof.username, ''), 'Jugador')::text,
     pred.match_id, pred.prediction, pred.secondary_prediction
