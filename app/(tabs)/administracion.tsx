@@ -23,6 +23,7 @@ export default function AdministracionScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [section, setSection] = useState<"resumen" | "pagos" | "prodes" | "equipo">("resumen");
 
   const load = useCallback(async () => {
     if (!role) return;
@@ -77,10 +78,26 @@ export default function AdministracionScreen() {
 
   return <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={styles.content}
     refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void load()} tintColor={colors.primary} />}>
-    <Text style={[styles.title, { color: colors.text.primary }]}>{role === "superadmin" ? "Superadmin" : "Administración"}</Text>
-    <Text style={{ color: colors.text.secondary }}>Panel de Prode San Jorge</Text>
+    <View style={styles.header}>
+      <View style={[styles.headerIcon, { backgroundColor: colors.primary }]}><Ionicons name="shield-checkmark-outline" size={25} color="#FFFFFF" /></View>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.title, { color: colors.text.primary }]}>Administración</Text>
+        <Text style={{ color: colors.text.secondary }}>Prode San Jorge · {role === "superadmin" ? "Superadmin" : "Admin"}</Text>
+      </View>
+    </View>
     {error ? <Text style={{ color: colors.danger }}>{error}</Text> : null}
 
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sections}>
+      {(["resumen", "pagos", "prodes", ...(role === "superadmin" ? ["equipo"] : [])] as typeof section[]).map((item) =>
+        <Pressable key={item} onPress={() => setSection(item)} accessibilityRole="tab" accessibilityState={{ selected: section === item }}
+          style={[styles.section, { backgroundColor: section === item ? colors.primary : colors.surface, borderColor: colors.border }]}>
+          <Text style={{ color: section === item ? "#FFFFFF" : colors.text.primary, fontWeight: "700" }}>
+            {item === "resumen" ? "Resumen" : item === "pagos" ? "Pagos" : item === "prodes" ? "Prodes" : "Equipo"}
+          </Text>
+        </Pressable>)}
+    </ScrollView>
+
+    {section === "resumen" ? <>
     <View style={styles.stats}>
       <View style={[styles.card, styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.number, { color: colors.primary }]}>{pending.length}</Text>
@@ -91,14 +108,24 @@ export default function AdministracionScreen() {
         <Text style={{ color: colors.text.secondary }}>Prodes abiertos</Text>
       </View>
     </View>
+    <Text style={[styles.heading, { color: colors.text.primary }]}>Para revisar</Text>
+    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Text style={[styles.itemName, { color: colors.text.primary }]}>{pending.length === 0 ? "No hay pagos pendientes" : `${pending.length} pago${pending.length === 1 ? "" : "s"} pendiente${pending.length === 1 ? "" : "s"}`}</Text>
+      <Text style={{ color: colors.text.secondary }}>Consultá los movimientos en la sección Pagos.</Text>
+      <Pressable onPress={() => setSection("pagos")}><Text style={{ color: colors.primary, fontWeight: "700" }}>Ver pagos →</Text></Pressable>
+    </View>
+    </> : null}
 
+    {section === "prodes" ? <>
     <Text style={[styles.heading, { color: colors.text.primary }]}>Prodes recientes</Text>
     {games.length === 0 ? <Text style={{ color: colors.text.secondary }}>No hay prodes cargados.</Text> :
       games.map((game) => <View key={game.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.itemName, { color: colors.text.primary }]}>{game.name}</Text>
-        <Text style={{ color: colors.text.secondary }}>Estado: {game.status}</Text>
+        <Text style={{ color: colors.text.secondary }}>Estado: {game.status === "open" ? "Abierto" : game.status === "closed" ? "Cerrado" : game.status}</Text>
       </View>)}
+    </> : null}
 
+    {section === "pagos" ? <>
     <Text style={[styles.heading, { color: colors.text.primary }]}>Pagos recientes</Text>
     {payments.length === 0 ? <Text style={{ color: colors.text.secondary }}>Todavía no hay pagos registrados.</Text> :
       payments.slice(0, 20).map((payment) => {
@@ -108,12 +135,13 @@ export default function AdministracionScreen() {
         const player = players.find((item) => item.id === participation?.user_id);
         return <View key={payment.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.itemName, { color: colors.text.primary }]}>{name ?? "Prode"} · @{player?.username ?? "jugador"}</Text>
-          <Text style={{ color: colors.text.secondary }}>{payment.amount} {payment.currency} · {payment.status}</Text>
+          <Text style={{ color: colors.text.secondary }}>{payment.amount} {payment.currency} · {payment.status === "pending" ? "Pendiente" : payment.status === "approved" ? "Aprobado" : payment.status === "rejected" ? "Rechazado" : payment.status}</Text>
         </View>;
       })}
     <Text style={{ color: colors.text.secondary }}>La revisión de comprobantes y aprobación de pagos se incorporará en el siguiente paso.</Text>
+    </> : null}
 
-    {role === "superadmin" ? <>
+    {role === "superadmin" && section === "equipo" ? <>
       <Text style={[styles.heading, { color: colors.text.primary }]}>Permisos del equipo</Text>
       <Text style={{ color: colors.text.secondary }}>Buscá por apodo y asigná el rol de admin. El superadmin se habilita inicialmente desde Supabase.</Text>
       <TextInput placeholder="Buscar apodo" placeholderTextColor={colors.text.secondary} value={query} onChangeText={setQuery}
@@ -133,7 +161,11 @@ export default function AdministracionScreen() {
 const styles = StyleSheet.create({
   content: { paddingTop: 58, paddingHorizontal: 20, paddingBottom: 120, gap: 12 },
   center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 16, padding: 24 },
-  title: { fontSize: 32, fontWeight: "900" },
+  header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 8 },
+  headerIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 28, fontWeight: "900" },
+  sections: { gap: 8, paddingVertical: 4 },
+  section: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 },
   heading: { fontSize: 21, fontWeight: "800", marginTop: 20 },
   stats: { flexDirection: "row", gap: 10, marginTop: 16 },
   card: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 5 },
