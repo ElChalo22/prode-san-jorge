@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { decode } from "base64-arraybuffer";
 import * as ImagePicker from "expo-image-picker";
-import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -64,8 +64,28 @@ export default function PronosticosScreen() {
     participationId: string; status: string; deadline: string | null; amount: number;
   } | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [confirmedPicks, setConfirmedPicks] = useState<{ participation_id: string; username: string; match_id: string;
+    prediction: string; secondary_prediction: string | null }[]>([]);
+  const [approvalNotice, setApprovalNotice] = useState<string | null>(null);
+  const [summary, setSummary] = useState({ players: 0, jackpot: 0 });
+  const locked = paymentInfo?.status === "confirmed";
 
-  const loadPayment = async (selectedGameId: string) => {
+  const loadCommunity = useCallback(async (selectedGameId: string) => {
+    const [picksResult, summaryResult] = await Promise.all([
+      supabase.rpc("game_confirmed_picks", { target_game_id: selectedGameId }),
+      supabase.rpc("game_public_summary", { target_game_id: selectedGameId }),
+    ]);
+    if (picksResult.error || summaryResult.error) {
+      console.error("Error cargando el pozo o pronósticos confirmados:", picksResult.error ?? summaryResult.error);
+      return;
+    }
+    setConfirmedPicks(picksResult.data ?? []);
+    setSummary({ players: Number(summaryResult.data?.[0]?.players ?? 0),
+      jackpot: Number(summaryResult.data?.[0]?.jackpot ?? 0) });
+  }, []);
+
+
+  const loadPayment = useCallback(async (selectedGameId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setPaymentInfo(null); return; }
     const { data: participation } = await supabase.from("participations")
@@ -76,7 +96,31 @@ export default function PronosticosScreen() {
       .select("amount").eq("participation_id", participation.id).maybeSingle();
     setPaymentInfo(payment ? { participationId: participation.id, status: participation.status,
       deadline: participation.payment_deadline, amount: payment.amount } : null);
-  };
+    if (participation.status === "confirmed") {
+      const { data: savedPicks } = await supabase.from("predictions")
+        .select("match_id,prediction,secondary_prediction")
+        .eq("participation_id", participation.id);
+      if (savedPicks) setPronosticos(Object.fromEntries(savedPicks.map((pick) => [
+        pick.match_id, `${pick.prediction}${pick.secondary_prediction ?? ""}` as Prediction,
+      ])));
+    }
+  }, []);
+  useFocusEffect(useCallback(() => {
+    if (!gameId) return;
+    void loadPayment(gameId);
+    void loadCommunity(gameId);
+    let active = true;
+    void supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { if (active) setApprovalNotice(null); return; }
+      const { data } = await supabase.from("player_notifications")
+        .select("message").eq("user_id", user.id).eq("prode_game_id", gameId)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (active) setApprovalNotice(data?.message ?? null);
+    });
+    return () => { active = false; };
+  }, [gameId, loadCommunity, loadPayment]));
+
+
 
   const attachReceipt = async () => {
     if (!paymentInfo || !game) return;
@@ -119,8 +163,7 @@ export default function PronosticosScreen() {
       return;
     }
 
-    loadGame(gameId);
-    void loadPayment(gameId);
+    void loadGame(gameId);
   }, [gameId, loadGame]);
 
   useEffect(() => {
@@ -136,7 +179,8 @@ export default function PronosticosScreen() {
   }, [gameId]);
 
   useEffect(() => {
-    setPronosticos({});
+    const reset = setTimeout(() => setPronosticos({}), 0);
+    return () => clearTimeout(reset);
   }, [gameId]);
 
   const partidos = useMemo(() => {
@@ -232,6 +276,7 @@ export default function PronosticosScreen() {
   };
 
   const guardarPronosticos = async () => {
+    if (locked) { Alert.alert("Pronósticos confirmados", "Tu participación ya fue aprobada y tus elecciones están cerradas."); return; }
     if (saving) {
       return;
     }
@@ -484,6 +529,11 @@ export default function PronosticosScreen() {
           </View>
         </View>
 
+        {approvalNotice && <View style={styles.approvalCard}>
+          <Ionicons name="checkmark-circle" size={20} color="#147D42" />
+          <Text style={styles.approvalText}>{approvalNotice}</Text>
+        </View>}
+
         <View style={styles.progressCard}>
           <View style={styles.progressHeader}>
             <Text style={styles.progressTitle}>
@@ -628,6 +678,7 @@ export default function PronosticosScreen() {
             visitanteLogo={partido.away_team.logo_url}
             providerId={partido.provider_id}
             selected={pronosticos[partido.id]}
+            locked={locked}
             onSelect={(opcion) =>
               seleccionarPronostico(
                 partido.id,
@@ -646,14 +697,35 @@ export default function PronosticosScreen() {
           />
         ))}
 
+        <View style={styles.progressCard}>
+          <Text style={styles.progressTitle}>Pozo: ARS {new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }).format(summary.jackpot)}</Text>
+          <Text style={styles.progressMessage}>{summary.players} {summary.players === 1 ? "participación aprobada" : "participaciones aprobadas"} · 78% de las entradas para premios</Text>
+        </View>
+
+        <View style={styles.progressCard}>
+          <Text style={styles.progressTitle}>Jugadores confirmados ({summary.players})</Text>
+          {summary.players === 0 ? <Text style={styles.progressMessage}>Todavía no hay pronósticos aprobados.</Text> :
+            Array.from(new Set(confirmedPicks.map((pick) => pick.participation_id))).map((participationId) => (
+              <View key={participationId} style={styles.playerPicks}>
+                <Text style={styles.playerName}>{confirmedPicks.find((item) => item.participation_id === participationId)?.username ?? "Jugador"}</Text>
+                {partidos.map((match) => {
+                  const pick = confirmedPicks.find((item) => item.participation_id === participationId && item.match_id === match.id);
+                  return <Text key={match.id} style={styles.pickLine}>
+                    {match.home_team.name} – {match.away_team.name}: {pick ? `${pick.prediction}${pick.secondary_prediction ?? ""}` : "—"}
+                  </Text>;
+                })}
+              </View>
+            ))}
+        </View>
+
         {partidos.length > 0 && (
           <>
             <Pressable
-              disabled={saving}
+              disabled={saving || locked}
               onPress={guardarPronosticos}
               style={({ pressed }) => [
                 styles.saveButton,
-                saving && styles.saveButtonDisabled,
+                (saving || locked) && styles.saveButtonDisabled,
                 pressed &&
                   !saving &&
                   styles.buttonPressed,
@@ -673,9 +745,7 @@ export default function PronosticosScreen() {
               )}
 
               <Text style={styles.saveButtonText}>
-                {saving
-                  ? "Guardando..."
-                  : "Guardar pronósticos"}
+                {locked ? "Pronósticos confirmados" : saving ? "Guardando..." : "Guardar pronósticos"}
               </Text>
             </Pressable>
 
@@ -695,8 +765,7 @@ export default function PronosticosScreen() {
             </View> : null}
 
             <Text style={styles.bottomMessage}>
-              Podrás modificar tus elecciones hasta el
-              cierre de la fecha.
+              {locked ? "Tus elecciones están cerradas desde la aprobación." : "Podrás modificar tus elecciones hasta que se apruebe tu pago o cierre la fecha."}
             </Text>
           </>
         )}
@@ -706,6 +775,11 @@ export default function PronosticosScreen() {
 }
 
 const styles = StyleSheet.create({
+  approvalCard: { flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: "#EAF8EF", borderRadius: 14, padding: 14, marginBottom: 12 },
+  approvalText: { flex: 1, color: "#147D42", fontSize: 13, fontWeight: "700" },
+  playerPicks: { borderTopWidth: 1, borderTopColor: "#EEEEEE", marginTop: 12, paddingTop: 10 },
+  playerName: { fontSize: 14, fontWeight: "800", color: "#111111", marginBottom: 5 },
+  pickLine: { fontSize: 11, color: "#555555", lineHeight: 19 },
   safeArea: {
     flex: 1,
     backgroundColor: "#F5F6F7",

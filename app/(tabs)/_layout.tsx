@@ -35,16 +35,6 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="torneos"
-        options={{
-          title: "Torneos",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trophy-outline" size={size} color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
         name="pronosticos"
         options={{
           title: "Pronósticos",

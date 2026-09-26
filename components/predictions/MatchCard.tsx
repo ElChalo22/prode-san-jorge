@@ -42,6 +42,7 @@ type MatchCardProps = {
   visitanteLogo?: string | null;
 
   selected?: Prediction;
+  locked?: boolean;
   onSelect: (prediction: Prediction) => void;
 
   showDoubleOptions?: boolean;
@@ -146,6 +147,7 @@ export default function MatchCard({
   visitanteLogo,
 
   selected,
+  locked = false,
   onSelect,
 
   showDoubleOptions = false,
@@ -178,7 +180,7 @@ export default function MatchCard({
       return;
     }
 
-    onSelect(prediction);
+    if (!locked) onSelect(prediction);
   };
 
   const dobleDeshabilitado =
@@ -241,6 +243,7 @@ export default function MatchCard({
 
       <View style={styles.predictionRow}>
         <Pressable
+          disabled={locked}
           onPress={() => seleccionar("1")}
           style={({ pressed }) => [
             styles.teamButton,
@@ -300,6 +303,7 @@ export default function MatchCard({
         </Pressable>
 
         <Pressable
+          disabled={locked}
           onPress={() => seleccionar("X")}
           style={({ pressed }) => [
             styles.drawButton,
@@ -308,6 +312,7 @@ export default function MatchCard({
             pressed && styles.pressed,
           ]}
         >
+          <View style={[styles.drawCircle, selected === "X" && styles.drawCircleSelected]}>
           <Text
             style={[
               styles.drawSymbol,
@@ -317,6 +322,7 @@ export default function MatchCard({
           >
             X
           </Text>
+          </View>
 
           <Text
             style={[
@@ -330,6 +336,7 @@ export default function MatchCard({
         </Pressable>
 
         <Pressable
+          disabled={locked}
           onPress={() => seleccionar("2")}
           style={({ pressed }) => [
             styles.teamButton,
@@ -405,7 +412,7 @@ export default function MatchCard({
 
           <View style={styles.doubleOptions}>
             <Pressable
-              disabled={dobleDeshabilitado}
+              disabled={locked || dobleDeshabilitado}
               onPress={() =>
                 seleccionar("1X")
               }
@@ -458,7 +465,7 @@ export default function MatchCard({
             </Pressable>
 
             <Pressable
-              disabled={dobleDeshabilitado}
+              disabled={locked || dobleDeshabilitado}
               onPress={() =>
                 seleccionar("X2")
               }
@@ -767,11 +774,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
 
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 11,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
 
-    marginBottom: 9,
+    marginBottom: 7,
 
     borderWidth: 1,
     borderColor: "#E8E8E8",
@@ -866,7 +873,7 @@ const styles = StyleSheet.create({
   teamButton: {
     flex: 1,
 
-    minHeight: 88,
+    minHeight: 74,
 
     borderRadius: 12,
 
@@ -880,9 +887,9 @@ const styles = StyleSheet.create({
   },
 
   drawButton: {
-    width: 58,
+    width: 56,
 
-    minHeight: 88,
+    minHeight: 74,
 
     borderRadius: 12,
 
@@ -897,8 +904,8 @@ const styles = StyleSheet.create({
   },
 
   shield: {
-    width: 39,
-    height: 39,
+    width: 34,
+    height: 34,
 
     borderRadius: 20,
 
@@ -918,8 +925,8 @@ const styles = StyleSheet.create({
   },
 
   teamLogo: {
-    width: 33,
-    height: 33,
+    width: 29,
+    height: 29,
   },
 
   teamName: {
@@ -944,10 +951,17 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
 
+  drawCircle: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#CDDCD2",
+    alignItems: "center", justifyContent: "center", marginBottom: 2,
+  },
+  drawCircleSelected: { backgroundColor: "#147D42", borderColor: "#FFFFFF" },
+
   drawSymbol: {
     color: "#111111",
 
-    fontSize: 20,
+    fontSize: 23,
     fontWeight: "900",
   },
 

@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -26,12 +26,11 @@ export default function HomeScreen() {
   const loading = useProdeStore((state) => state.loading);
   const refreshing = useProdeStore((state) => state.refreshing);
   const error = useProdeStore((state) => state.error);
-  const loadGames = useProdeStore((state) => state.loadGames);
   const refreshGames = useProdeStore((state) => state.refreshGames);
 
-  useEffect(() => {
-    loadGames();
-  }, [loadGames]);
+  useFocusEffect(useCallback(() => {
+    void refreshGames();
+  }, [refreshGames]));
 
   const homeGames = games.map(toHomeProdeCard);
 

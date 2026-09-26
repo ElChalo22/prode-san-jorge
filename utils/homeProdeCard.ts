@@ -85,9 +85,9 @@ export function toHomeProdeCard(
 
     entryFee: `${game.currency} ${game.entry_fee}`,
 
-    jackpot: `${game.currency} 0`,
+    jackpot: `${game.currency} ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }).format(game.jackpotAmount ?? 0)}`,
 
-    players: 0,
+    players: game.confirmedPlayers ?? 0,
 
     countdown: formatCountdown(
       game.closes_at,

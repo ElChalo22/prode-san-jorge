@@ -19,6 +19,8 @@ export interface MatchdayWithMatches extends Matchday {
 export interface ProdeGameWithDetails extends ProdeGame {
   prode_group: ProdeGroup;
   matchdays: MatchdayWithMatches[];
+  confirmedPlayers?: number;
+  jackpotAmount?: number;
 }
 
 const PRODE_GAME_DETAILS_SELECT = `
@@ -74,7 +76,16 @@ export async function getOpenProdeGames(): Promise<
     throw error;
   }
 
-  return (data ?? []).map(normalizeProdeGame);
+  const games = (data ?? []).map(normalizeProdeGame);
+  const summaries = await Promise.all(games.map((game) =>
+    supabase.rpc("game_public_summary", { target_game_id: game.id })
+  ));
+  summaries.forEach((summary, index) => {
+    if (summary.error) throw summary.error;
+    games[index].confirmedPlayers = Number(summary.data?.[0]?.players ?? 0);
+    games[index].jackpotAmount = Number(summary.data?.[0]?.jackpot ?? 0);
+  });
+  return games;
 }
 
 export async function getProdeGameById(
