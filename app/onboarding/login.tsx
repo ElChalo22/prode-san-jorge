@@ -1,4 +1,6 @@
 import { supabase } from "@/lib/supabase";
+import { useAppAppearance } from "../../lib/appearance";
+import { lightColors } from "../../theme/colors";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -14,6 +16,7 @@ import {
 } from "react-native";
 
 export default function LoginScreen() {
+  const { isDark } = useAppAppearance();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [creatingAccount, setCreatingAccount] = useState(false);
@@ -67,12 +70,12 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView style={[styles.container, !isDark && { backgroundColor: lightColors.background }]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.logo}>⚽</Text>
-          <Text style={styles.title}>{creatingAccount ? "Creá tu cuenta" : "Bienvenido"}</Text>
-          <Text style={styles.subtitle}>Entrá con tu correo para guardar pronósticos y seguir tus aciertos.</Text>
+          <Text style={[styles.title, !isDark && { color: lightColors.text.primary }]}>{creatingAccount ? "Creá tu cuenta" : "Bienvenido"}</Text>
+          <Text style={[styles.subtitle, !isDark && { color: lightColors.text.secondary }]}>Entrá con tu correo para guardar pronósticos y seguir tus aciertos.</Text>
         </View>
 
         <View style={styles.form}>
@@ -80,7 +83,7 @@ export default function LoginScreen() {
             accessibilityLabel="Correo electrónico"
             value={email}
             onChangeText={setEmail}
-            style={styles.input}
+            style={[styles.input, !isDark && { color: lightColors.text.primary, backgroundColor: lightColors.surface, borderWidth: 1, borderColor: lightColors.border }]}
             placeholder="Correo electrónico"
             placeholderTextColor="#89919B"
             autoCapitalize="none"
@@ -92,7 +95,7 @@ export default function LoginScreen() {
             accessibilityLabel="Contraseña"
             value={password}
             onChangeText={setPassword}
-            style={styles.input}
+            style={[styles.input, !isDark && { color: lightColors.text.primary, backgroundColor: lightColors.surface, borderWidth: 1, borderColor: lightColors.border }]}
             placeholder="Contraseña"
             placeholderTextColor="#89919B"
             secureTextEntry
@@ -104,12 +107,12 @@ export default function LoginScreen() {
             {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>{creatingAccount ? "Crear cuenta" : "Iniciar sesión"}</Text>}
           </Pressable>
           <Pressable disabled={busy} onPress={() => { setCreatingAccount(!creatingAccount); setMessage(null); }} style={styles.switchButton}>
-            <Text style={styles.switchText}>
+            <Text style={[styles.switchText, !isDark && { color: lightColors.text.primary }]}>
               {creatingAccount ? "¿Ya tenés cuenta? Iniciá sesión" : "¿Todavía no tenés cuenta? Registrate"}
             </Text>
           </Pressable>
         </View>
-        <Text style={styles.footer}>Prode San Jorge · Acceso con correo y contraseña</Text>
+        <Text style={[styles.footer, !isDark && { color: lightColors.text.secondary }]}>Prode San Jorge · Acceso con correo y contraseña</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );

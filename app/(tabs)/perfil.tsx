@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { supabase } from "../../lib/supabase";
 import { darkColors, lightColors } from "../../theme/colors";
+import { useAppAppearance } from "../../lib/appearance";
 
 type Profile = { username: string | null; full_name: string | null; avatar_url: string | null; favorite_team_id: string | null };
 type FavoriteTeam = { id: string; name: string; logo_url: string | null };
@@ -18,7 +19,8 @@ type Participation = {
 const REWARD_MILESTONES = [50, 125] as const;
 
 export default function PerfilScreen() {
-  const colors = useColorScheme() === "dark" ? darkColors : lightColors;
+  const { isDark } = useAppAppearance();
+  const colors = isDark ? darkColors : lightColors;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [participations, setParticipations] = useState<Participation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,11 +28,6 @@ export default function PerfilScreen() {
   const [error, setError] = useState<string | null>(null);
   const [signedIn, setSignedIn] = useState(false);
   const [favoriteTeam, setFavoriteTeam] = useState<FavoriteTeam | null>(null);
-  const [teamOptions, setTeamOptions] = useState<FavoriteTeam[]>([]);
-  const [teamQuery, setTeamQuery] = useState("");
-  const [teamPickerVisible, setTeamPickerVisible] = useState(false);
-  const [savingTeam, setSavingTeam] = useState(false);
-
   const load = useCallback(async () => {
     try {
       setError(null);
@@ -69,31 +66,14 @@ export default function PerfilScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
-  const searchTeams = async (search: string) => {
-    setTeamQuery(search);
-    const cleaned = search.trim().replace(/[%,()]/g, "");
-    const request = supabase.from("teams").select("id,name,logo_url").eq("active", true)
-      .order("name").limit(25);
-    const { data, error: teamError } = cleaned.length > 0
-      ? await request.ilike("name", `%${cleaned}%`) : await request;
-    if (teamError) setError(teamError.message);
-    else setTeamOptions(data ?? []);
-  };
-
-  const chooseTeam = async (team: FavoriteTeam) => {
-    setSavingTeam(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSavingTeam(false); return; }
-    const { error: saveError } = await supabase.from("profiles")
-      .update({ favorite_team_id: team.id }).eq("id", user.id);
-    if (saveError) setError(saveError.message);
-    else {
-      setFavoriteTeam(team);
-      setTeamPickerVisible(false);
-      setTeamQuery("");
-    }
-    setSavingTeam(false);
-  };
+  const signOut = () => Alert.alert("Cerrar sesión", "¿Querés salir de tu cuenta?", [
+    { text: "Cancelar", style: "cancel" },
+    { text: "Cerrar sesión", style: "destructive", onPress: async () => {
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) Alert.alert("No pudimos cerrar sesión", signOutError.message);
+      else router.replace("/onboarding/welcome");
+    } },
+  ]);
 
   const displayProfile = profile;
   const displayParticipations = participations;
@@ -135,30 +115,13 @@ export default function PerfilScreen() {
           </View>
           <Text style={[styles.username, { color: colors.text.primary }]}>@{username}</Text>
           <Text style={[styles.hint, { color: colors.text.secondary }]}>Tu nombre público en el prode</Text>
-          <Pressable onPress={() => {
-            setTeamPickerVisible((visible) => !visible);
-            if (!teamPickerVisible) void searchTeams("");
-          }} style={[styles.team, { backgroundColor: colors.background }]}>
+          <View style={[styles.team, { backgroundColor: colors.background }]}>
             {favoriteTeam?.logo_url ? <Image source={{ uri: favoriteTeam.logo_url }} style={styles.teamLogo} />
               : <Ionicons name="shield-outline" size={24} color={colors.primary} />}
             <Text style={{ color: colors.text.primary, fontWeight: "700" }}>
-              {favoriteTeam?.name ?? "Elegir mi equipo"}
+              {favoriteTeam?.name ?? "Club sin elegir"}
             </Text>
-            <Ionicons name="chevron-down" size={16} color={colors.text.secondary} />
-          </Pressable>
-          {teamPickerVisible && <View style={styles.teamPicker}>
-            <TextInput placeholder="Buscar tu equipo" placeholderTextColor={colors.text.secondary}
-              value={teamQuery} onChangeText={(value) => { void searchTeams(value); }}
-              style={[styles.teamSearch, { color: colors.text.primary, borderColor: colors.border }]} />
-            {savingTeam ? <ActivityIndicator color={colors.primary} /> :
-              teamOptions.length === 0 ? <Text style={{ color: colors.text.secondary }}>No encontramos equipos.</Text> :
-              teamOptions.map((team) => <Pressable key={team.id} onPress={() => void chooseTeam(team)}
-                style={[styles.teamOption, { borderBottomColor: colors.border }]}>
-                {team.logo_url ? <Image source={{ uri: team.logo_url }} style={styles.teamLogo} />
-                  : <Ionicons name="shield-outline" size={22} color={colors.primary} />}
-                <Text style={{ color: colors.text.primary, flex: 1 }}>{team.name}</Text>
-              </Pressable>)}
-          </View>}
+          </View>
         </View>
         <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Ionicons name="trophy-outline" size={28} color={colors.primary} />
@@ -215,6 +178,10 @@ export default function PerfilScreen() {
             <Text style={[styles.privateHint, { color: colors.text.secondary }]}>No se muestra en esta pantalla a otros jugadores.</Text>
           </View>
         </View>
+        <Pressable onPress={signOut} style={[styles.signOut, { borderColor: colors.danger }]}>
+          <Ionicons name="log-out-outline" size={21} color={colors.danger} />
+          <Text style={{ color: colors.danger, fontWeight: "800" }}>Cerrar sesión</Text>
+        </Pressable>
       </> : null}
     </ScrollView>
   );
@@ -233,10 +200,8 @@ const styles = StyleSheet.create({
   previewTitle: { fontSize: 15, fontWeight: "800" },
   loginButton: { alignSelf: "flex-start", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8 },
   loginButtonText: { color: "#FFFFFF", fontWeight: "800" },
-  teamPicker: { width: "100%", marginTop: 12, gap: 8 },
   teamLogo: { width: 30, height: 30, resizeMode: "contain" },
-  teamSearch: { width: "100%", borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-  teamOption: { width: "100%", flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: 1, paddingVertical: 8 },
+  signOut: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 15, borderWidth: 1, borderRadius: 14, marginTop: 12 },
   team: { marginTop: 18, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8 },
   summaryCard: { borderWidth: 1, borderRadius: 18, padding: 20, alignItems: "center", gap: 4 },
   summaryNumber: { fontSize: 28, fontWeight: "900", marginTop: 4 },

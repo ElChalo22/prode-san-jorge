@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
+import { useAppAppearance } from "../../lib/appearance";
 import {
   ActivityIndicator,
   Image,
@@ -125,10 +126,10 @@ function FormPill({ result }: { result: TeamFormResult }) {
   return (
     <View
       style={[
-        styles.formPill,
-        result === "V" && styles.formWin,
-        result === "E" && styles.formDraw,
-        result === "D" && styles.formLoss,
+        formStyles.formPill,
+        result === "V" && formStyles.formWin,
+        result === "E" && formStyles.formDraw,
+        result === "D" && formStyles.formLoss,
       ]}
     >
       <Ionicons name={icon} size={11} color="#FFFFFF" />
@@ -160,6 +161,8 @@ export default function MatchCard({
   statsError = null,
   onStatsPress,
 }: MatchCardProps) {
+  const { isDark } = useAppAppearance();
+  const styles = React.useMemo(() => makeStyles(isDark), [isDark]);
   const [statsVisible, setStatsVisible] =
     React.useState(false);
   const seleccionar = (
@@ -769,9 +772,9 @@ export default function MatchCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (dark: boolean) => StyleSheet.create({
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: (dark ? "#181818" : "#FFFFFF"),
     borderRadius: 16,
 
     paddingHorizontal: 10,
@@ -781,7 +784,7 @@ const styles = StyleSheet.create({
     marginBottom: 7,
 
     borderWidth: 1,
-    borderColor: "#E8E8E8",
+    borderColor: (dark ? "#2B2B2B" : "#E8E8E8"),
 
     shadowColor: "#000000",
     shadowOpacity: 0.025,
@@ -825,7 +828,7 @@ const styles = StyleSheet.create({
 
     gap: 3,
 
-    backgroundColor: "#FFF0C7",
+    backgroundColor: (dark ? "#453314" : "#FFF0C7"),
 
     borderRadius: 20,
 
@@ -851,9 +854,9 @@ const styles = StyleSheet.create({
     width: 27,
     height: 27,
     borderRadius: 14,
-    backgroundColor: "#EAF7F0",
+    backgroundColor: (dark ? "#173726" : "#EAF7F0"),
     borderWidth: 1,
-    borderColor: "#CFECDD",
+    borderColor: (dark ? "#315A3F" : "#CFECDD"),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -877,7 +880,7 @@ const styles = StyleSheet.create({
 
     borderRadius: 12,
 
-    backgroundColor: "#F3F4F5",
+    backgroundColor: (dark ? "#2A2A2A" : "#F3F4F5"),
 
     alignItems: "center",
     justifyContent: "center",
@@ -893,7 +896,7 @@ const styles = StyleSheet.create({
 
     borderRadius: 12,
 
-    backgroundColor: "#F3F4F5",
+    backgroundColor: (dark ? "#2A2A2A" : "#F3F4F5"),
 
     alignItems: "center",
     justifyContent: "center",
@@ -909,7 +912,7 @@ const styles = StyleSheet.create({
 
     borderRadius: 20,
 
-    backgroundColor: "#FFFFFF",
+    backgroundColor: (dark ? "#181818" : "#FFFFFF"),
 
     alignItems: "center",
     justifyContent: "center",
@@ -930,7 +933,7 @@ const styles = StyleSheet.create({
   },
 
   teamName: {
-    color: "#111111",
+    color: (dark ? "#FFFFFF" : "#111111"),
 
     fontSize: 10,
     lineHeight: 12,
@@ -943,7 +946,7 @@ const styles = StyleSheet.create({
   },
 
   teamResult: {
-    color: "#777777",
+    color: (dark ? "#A3A3A3" : "#777777"),
 
     fontSize: 8,
     fontWeight: "700",
@@ -953,20 +956,20 @@ const styles = StyleSheet.create({
 
   drawCircle: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#CDDCD2",
+    backgroundColor: (dark ? "#181818" : "#FFFFFF"), borderWidth: 1, borderColor: "#CDDCD2",
     alignItems: "center", justifyContent: "center", marginBottom: 2,
   },
-  drawCircleSelected: { backgroundColor: "#147D42", borderColor: "#FFFFFF" },
+  drawCircleSelected: { backgroundColor: "#147D42", borderColor: (dark ? "#181818" : "#FFFFFF") },
 
   drawSymbol: {
-    color: "#111111",
+    color: (dark ? "#FFFFFF" : "#111111"),
 
     fontSize: 23,
     fontWeight: "900",
   },
 
   drawText: {
-    color: "#777777",
+    color: (dark ? "#A3A3A3" : "#777777"),
 
     fontSize: 8,
     fontWeight: "700",
@@ -980,7 +983,7 @@ const styles = StyleSheet.create({
 
   doubleSection: {
     borderTopWidth: 1,
-    borderTopColor: "#EEEEEE",
+    borderTopColor: (dark ? "#2B2B2B" : "#EEEEEE"),
 
     marginTop: 8,
     paddingTop: 7,
@@ -1015,10 +1018,10 @@ const styles = StyleSheet.create({
 
     borderRadius: 10,
 
-    backgroundColor: "#FFF8E8",
+    backgroundColor: (dark ? "#302916" : "#FFF8E8"),
 
     borderWidth: 1,
-    borderColor: "#EED89D",
+    borderColor: (dark ? "#58451D" : "#EED89D"),
 
     flexDirection: "row",
 
@@ -1047,7 +1050,7 @@ const styles = StyleSheet.create({
   doubleButtonText: {
     flex: 1,
 
-    color: "#805B17",
+    color: (dark ? "#E5C575" : "#805B17"),
 
     fontSize: 8,
     lineHeight: 10,
@@ -1071,7 +1074,7 @@ const styles = StyleSheet.create({
   statsSheet: {
     maxHeight: "78%",
     minHeight: 330,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: (dark ? "#181818" : "#FFFFFF"),
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 8,
@@ -1081,7 +1084,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#D7D7D7",
+    backgroundColor: (dark ? "#555555" : "#D7D7D7"),
     alignSelf: "center",
     marginBottom: 8,
   },
@@ -1108,7 +1111,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#EAF7F0",
+    backgroundColor: (dark ? "#173726" : "#EAF7F0"),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1118,13 +1121,13 @@ const styles = StyleSheet.create({
   },
 
   statsTitle: {
-    color: "#111111",
+    color: (dark ? "#FFFFFF" : "#111111"),
     fontSize: 14,
     fontWeight: "900",
   },
 
   statsSubtitle: {
-    color: "#777777",
+    color: (dark ? "#A3A3A3" : "#777777"),
     fontSize: 10,
     fontWeight: "700",
     marginTop: 2,
@@ -1134,7 +1137,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#F3F4F5",
+    backgroundColor: (dark ? "#2A2A2A" : "#F3F4F5"),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1176,7 +1179,7 @@ const styles = StyleSheet.create({
   },
 
   statsSectionTitle: {
-    color: "#111111",
+    color: (dark ? "#FFFFFF" : "#111111"),
     fontSize: 10,
     fontWeight: "900",
     marginBottom: 10,
@@ -1278,7 +1281,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#EAF7F0",
+    backgroundColor: (dark ? "#173726" : "#EAF7F0"),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1304,12 +1307,12 @@ const styles = StyleSheet.create({
     height: 560,
     overflow: "hidden",
     borderRadius: 14,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: (dark ? "#181818" : "#FFFFFF"),
   },
 
   webView: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: (dark ? "#181818" : "#FFFFFF"),
   },
 
   webViewLoading: {
@@ -1317,7 +1320,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: (dark ? "#181818" : "#FFFFFF"),
   },
 
   pressed: {
@@ -1330,3 +1333,5 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
 });
+
+const formStyles = makeStyles(false);

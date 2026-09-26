@@ -1,9 +1,10 @@
+import { useAppAppearance } from "../../lib/appearance";
 // CMP-004
 
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
-import { lightColors, spacing } from "../../theme";
+import { darkColors, lightColors, spacing } from "../../theme";
 import Card from "../common/Card";
 
 type Stat = {
@@ -15,6 +16,8 @@ type Stat = {
 type Props = { played: number | null; wins: number | null; hits: number | null; won: number | null };
 
 export default function HomeStats({ played, wins, hits, won }: Props) {
+  const { isDark } = useAppAppearance();
+  const colors = isDark ? darkColors : lightColors;
   const stats: Stat[] = [
   {
     icon: "football-outline",
@@ -40,25 +43,25 @@ export default function HomeStats({ played, wins, hits, won }: Props) {
 
   return (
     <>
-      <Text style={styles.title}>
+      <Text style={[styles.title, { color: colors.text.primary }]}>
         Tus estadísticas
       </Text>
 
-      {played === null && <Text style={styles.guest}>Iniciá sesión para ver tus estadísticas.</Text>}
+      {played === null && <Text style={[styles.guest, { color: colors.text.secondary }]}>Iniciá sesión para ver tus estadísticas.</Text>}
       <View style={styles.grid}>
         {stats.map((item) => (
           <Card key={item.title} style={styles.card}>
             <Ionicons
               name={item.icon}
               size={24}
-              color={lightColors.primary}
+              color={colors.primary}
             />
 
-            <Text style={styles.value}>
+            <Text style={[styles.value, { color: colors.text.primary }]}>
               {item.value}
             </Text>
 
-            <Text style={styles.label}>
+            <Text style={[styles.label, { color: colors.text.secondary }]}>
               {item.title}
             </Text>
           </Card>

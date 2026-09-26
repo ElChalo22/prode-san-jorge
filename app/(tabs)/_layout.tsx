@@ -1,22 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { useStaffRole } from "../../lib/useStaffRole";
+import { useAppAppearance } from "../../lib/appearance";
 
 export default function TabsLayout() {
-  const { role } = useStaffRole();
+  const { isDark } = useAppAppearance();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#111111",
-        tabBarInactiveTintColor: "#8A8A8A",
+        tabBarActiveTintColor: isDark ? "#FFFFFF" : "#111111",
+        tabBarInactiveTintColor: isDark ? "#AAAAAA" : "#8A8A8A",
         tabBarStyle: {
           height: 85,
           paddingTop: 8,
           paddingBottom: 20,
           borderTopWidth: 1,
-          borderTopColor: "#E8E8E8",
-          backgroundColor: "#FFFFFF",
+          borderTopColor: isDark ? "#2B2B2B" : "#E8E8E8",
+          backgroundColor: isDark ? "#181818" : "#FFFFFF",
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -64,13 +64,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="configuracion"
+        options={{ title: "Configuración", tabBarIcon: ({ color, size }) => (
+          <Ionicons name="settings-outline" size={size} color={color} />
+        ) }}
+      />
+      <Tabs.Screen
         name="administracion"
         options={{
-          title: role === "superadmin" ? "Superadmin" : "Admin",
-          href: role ? undefined : null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          ),
+          href: null,
         }}
       />
     </Tabs>

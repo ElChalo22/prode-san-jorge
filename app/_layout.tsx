@@ -2,6 +2,8 @@ import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { AppAppearanceProvider } from "../lib/appearance";
+import { StatusBar } from "expo-status-bar";
 
 export default function RootLayout() {
   useEffect(() => {
@@ -38,11 +40,14 @@ export default function RootLayout() {
     };
   }, []);
   return (
+    <AppAppearanceProvider>
+      <StatusBar style="auto" />
     <Stack
       screenOptions={{
         headerShown: false,
         animation: "fade",
       }}
     />
+    </AppAppearanceProvider>
   );
 }

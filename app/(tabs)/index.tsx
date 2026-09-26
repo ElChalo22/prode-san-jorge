@@ -17,7 +17,8 @@ import ProdeCard from "../../components/home/ProdeCard";
 
 import { useProdeStore } from "../../store/prodeStore";
 import { supabase } from "../../lib/supabase";
-import { lightColors } from "../../theme";
+import { darkColors, lightColors } from "../../theme";
+import { useAppAppearance } from "../../lib/appearance";
 import { toHomeProdeCard } from "../../utils/homeProdeCard";
 
 type RankingRow = { game_name: string; username: string; hits: number; rank_position: number };
@@ -25,10 +26,14 @@ type PlayerStats = { played: number | null; hits: number | null; wins: number | 
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { isDark } = useAppAppearance();
+  const colors = isDark ? darkColors : lightColors;
+  const [staff, setStaff] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [username, setUsername] = useState("Jugador");
   const [playerStats, setPlayerStats] = useState<PlayerStats>({ played: null, hits: null, wins: null, won: null });
   const [ranking, setRanking] = useState<RankingRow[]>([]);
-  const [latestNotice, setLatestNotice] = useState<string | null>(null);
+
 
   const loadHomeData = useCallback(async () => {
     try {
@@ -39,18 +44,20 @@ export default function HomeScreen() {
       if (!user) {
         setUsername("Jugador");
         setPlayerStats({ played: null, hits: null, wins: null, won: null });
-        setLatestNotice(null);
+        setUnreadCount(0);
+        setStaff(false);
         return;
       }
       const [profile, entries, notice] = await Promise.all([
-        supabase.from("profiles").select("username").eq("id", user.id).single(),
+        supabase.from("profiles").select("username,role").eq("id", user.id).single(),
         supabase.from("participations").select("id,hits").eq("user_id", user.id).eq("status", "confirmed"),
-        supabase.from("player_notifications").select("message").eq("user_id", user.id)
-          .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("player_notifications").select("id", { count: "exact", head: true })
+          .eq("user_id", user.id).is("read_at", null),
       ]);
       if (profile.error || entries.error || notice.error) throw profile.error ?? entries.error ?? notice.error;
       setUsername(profile.data.username?.trim() || "Jugador");
-      setLatestNotice(notice.data?.message ?? null);
+      setUnreadCount(notice.count ?? 0);
+      setStaff(profile.data.role === "admin" || profile.data.role === "superadmin");
       const confirmed = entries.data ?? [];
       const { data: awards, error: awardsError } = confirmed.length
         ? await supabase.from("winners").select("prode_game_id,prize_amount").in("participation_id", confirmed.map((entry) => entry.id))
@@ -80,7 +87,7 @@ export default function HomeScreen() {
   const homeGames = games.map(toHomeProdeCard);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -91,12 +98,14 @@ export default function HomeScreen() {
           />
         }
       >
-        <HomeHeader username={username} latestNotice={latestNotice} />
+        <HomeHeader username={username} unreadCount={unreadCount} openGames={games.length}
+          onNotifications={() => router.push("/notifications")}
+          onAdmin={staff ? () => router.push("/administracion") : undefined} />
 
         {loading && (
           <View style={styles.feedback}>
             <ActivityIndicator size="large" />
-            <Text style={styles.feedbackText}>
+            <Text style={[styles.feedbackText, { color: colors.text.secondary }]}>
               Cargando prodes...
             </Text>
           </View>
@@ -110,7 +119,7 @@ export default function HomeScreen() {
 
         {!loading && !error && homeGames.length === 0 && (
           <View style={styles.feedback}>
-            <Text style={styles.feedbackText}>
+            <Text style={[styles.feedbackText, { color: colors.text.secondary }]}>
               No hay prodes abiertos en este momento.
             </Text>
           </View>

@@ -1,7 +1,8 @@
+import { useAppAppearance } from "../../lib/appearance";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { lightColors, spacing } from "../../theme";
+import { darkColors, lightColors, spacing } from "../../theme";
 import type { HomeProdeCard } from "../../types/home";
 import Card from "../common/Card";
 
@@ -11,43 +12,45 @@ type Props = {
 };
 
 export default function ProdeCard({ game, onPress }: Props) {
+  const { isDark } = useAppAppearance();
+  const colors = isDark ? darkColors : lightColors;
   return (
     <Pressable onPress={onPress}>
       <Card style={styles.card}>
         <View style={styles.header}>
-          <Text style={styles.title}>
+          <Text style={[styles.title, { color: colors.text.primary }]}>
             {game.emoji} {game.title}
           </Text>
 
           <Ionicons
             name="chevron-forward"
             size={22}
-            color={lightColors.text.secondary}
+            color={colors.text.secondary}
           />
         </View>
 
-        <Text style={styles.description}>
+        <Text style={[styles.description, { color: colors.text.secondary }]}>
           {game.description}
         </Text>
 
         <View style={styles.infoRow}>
-          <Text style={styles.label}>🎟️ Entrada</Text>
-          <Text style={styles.value}>{game.entryFee}</Text>
+          <Text style={[styles.label, { color: colors.text.secondary }]}>🎟️ Entrada</Text>
+          <Text style={[styles.value, { color: colors.text.primary }]}>{game.entryFee}</Text>
         </View>
 
         <View style={styles.infoRow}>
-          <Text style={styles.label}>💰 Pozo</Text>
-          <Text style={styles.value}>{game.jackpot}</Text>
+          <Text style={[styles.label, { color: colors.text.secondary }]}>💰 Pozo</Text>
+          <Text style={[styles.value, { color: colors.text.primary }]}>{game.jackpot}</Text>
         </View>
 
         <View style={styles.infoRow}>
-          <Text style={styles.label}>👥 Jugadores</Text>
-          <Text style={styles.value}>{game.players}</Text>
+          <Text style={[styles.label, { color: colors.text.secondary }]}>👥 Jugadores</Text>
+          <Text style={[styles.value, { color: colors.text.primary }]}>{game.players}</Text>
         </View>
 
         <View style={styles.infoRow}>
-          <Text style={styles.label}>⏳ Cierra en</Text>
-          <Text style={styles.countdown}>{game.countdown}</Text>
+          <Text style={[styles.label, { color: colors.text.secondary }]}>⏳ Cierra en</Text>
+          <Text style={[styles.countdown, { color: colors.primary }]}>{game.countdown}</Text>
         </View>
       </Card>
     </Pressable>

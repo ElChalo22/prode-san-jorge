@@ -21,6 +21,7 @@ import MatchCard, {
 import type { PredictionValue } from "../../database/types";
 
 import { supabase } from "../../lib/supabase";
+import { useAppAppearance } from "../../lib/appearance";
 import {
   subscribeToLiveMatches,
   usePredictionStore,
@@ -33,6 +34,8 @@ const esPronosticoDoble = (
 };
 
 export default function PronosticosScreen() {
+  const { isDark } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(isDark), [isDark]);
   const params = useLocalSearchParams<{
     gameId?: string | string[];
   }>();
@@ -774,15 +777,15 @@ export default function PronosticosScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  approvalCard: { flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: "#EAF8EF", borderRadius: 14, padding: 14, marginBottom: 12 },
+const makeStyles = (dark: boolean) => StyleSheet.create({
+  approvalCard: { flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: (dark ? "#173726" : "#EAF8EF"), borderRadius: 14, padding: 14, marginBottom: 12 },
   approvalText: { flex: 1, color: "#147D42", fontSize: 13, fontWeight: "700" },
   playerPicks: { borderTopWidth: 1, borderTopColor: "#EEEEEE", marginTop: 12, paddingTop: 10 },
-  playerName: { fontSize: 14, fontWeight: "800", color: "#111111", marginBottom: 5 },
+  playerName: { fontSize: 14, fontWeight: "800", color: (dark ? "#FFFFFF" : "#111111"), marginBottom: 5 },
   pickLine: { fontSize: 11, color: "#555555", lineHeight: 19 },
   safeArea: {
     flex: 1,
-    backgroundColor: "#F5F6F7",
+    backgroundColor: (dark ? "#0D0D0D" : "#F5F6F7"),
   },
 
   container: {
@@ -799,7 +802,7 @@ const styles = StyleSheet.create({
   },
 
   feedbackText: {
-    color: "#777777",
+    color: (dark ? "#A3A3A3" : "#777777"),
     fontSize: 14,
     lineHeight: 20,
     textAlign: "center",
@@ -807,7 +810,7 @@ const styles = StyleSheet.create({
   },
 
   errorTitle: {
-    color: "#111111",
+    color: (dark ? "#FFFFFF" : "#111111"),
     fontSize: 18,
     fontWeight: "800",
     textAlign: "center",
@@ -841,7 +844,7 @@ const styles = StyleSheet.create({
   },
 
   fecha: {
-    color: "#777777",
+    color: (dark ? "#A3A3A3" : "#777777"),
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1,
@@ -849,13 +852,13 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    color: "#111111",
+    color: (dark ? "#FFFFFF" : "#111111"),
     fontSize: 28,
     fontWeight: "800",
   },
 
   subtitle: {
-    color: "#707070",
+    color: (dark ? "#A3A3A3" : "#707070"),
     fontSize: 13,
     lineHeight: 19,
     marginTop: 5,
@@ -865,20 +868,20 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: (dark ? "#181818" : "#FFFFFF"),
     borderWidth: 1,
-    borderColor: "#E8E8E8",
+    borderColor: (dark ? "#2B2B2B" : "#E8E8E8"),
     alignItems: "center",
     justifyContent: "center",
   },
 
   progressCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: (dark ? "#181818" : "#FFFFFF"),
     borderRadius: 18,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#E8E8E8",
+    borderColor: (dark ? "#2B2B2B" : "#E8E8E8"),
   },
 
   progressHeader: {
@@ -887,7 +890,7 @@ const styles = StyleSheet.create({
   },
 
   progressTitle: {
-    color: "#111111",
+    color: (dark ? "#FFFFFF" : "#111111"),
     fontSize: 15,
     fontWeight: "800",
   },
@@ -901,7 +904,7 @@ const styles = StyleSheet.create({
   progressBackground: {
     height: 9,
     borderRadius: 10,
-    backgroundColor: "#E5E5E5",
+    backgroundColor: (dark ? "#2B2B2B" : "#E5E5E5"),
     marginTop: 13,
     overflow: "hidden",
   },
@@ -913,18 +916,18 @@ const styles = StyleSheet.create({
   },
 
   progressMessage: {
-    color: "#777777",
+    color: (dark ? "#A3A3A3" : "#777777"),
     fontSize: 11,
     marginTop: 9,
   },
 
   doubleCard: {
-    backgroundColor: "#FFF9EA",
+    backgroundColor: (dark ? "#2B2418" : "#FFF9EA"),
     borderRadius: 18,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#EED89D",
+    borderColor: (dark ? "#58451D" : "#EED89D"),
   },
 
   doubleHeader: {
@@ -943,33 +946,33 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#FFF0C7",
+    backgroundColor: (dark ? "#453314" : "#FFF0C7"),
     alignItems: "center",
     justifyContent: "center",
   },
 
   doubleLabel: {
-    color: "#9A6513",
+    color: (dark ? "#F5D891" : "#9A6513"),
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
 
   doubleTitle: {
-    color: "#5E430F",
+    color: (dark ? "#F5D891" : "#5E430F"),
     fontSize: 15,
     fontWeight: "800",
     marginTop: 2,
   },
 
   doubleCounter: {
-    color: "#9A6513",
+    color: (dark ? "#F5D891" : "#9A6513"),
     fontSize: 20,
     fontWeight: "900",
   },
 
   doubleDescription: {
-    color: "#7B641F",
+    color: (dark ? "#D2BD83" : "#7B641F"),
     fontSize: 12,
     lineHeight: 18,
     marginTop: 13,
@@ -978,7 +981,7 @@ const styles = StyleSheet.create({
   doubleProgressBackground: {
     height: 8,
     borderRadius: 10,
-    backgroundColor: "#F0E0B4",
+    backgroundColor: (dark ? "#453314" : "#F0E0B4"),
     marginTop: 12,
     overflow: "hidden",
   },
@@ -990,7 +993,7 @@ const styles = StyleSheet.create({
   },
 
   doubleMessage: {
-    color: "#8A6B20",
+    color: (dark ? "#D2BD83" : "#8A6B20"),
     fontSize: 10,
     fontWeight: "600",
     marginTop: 8,
@@ -1001,14 +1004,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
-    backgroundColor: "#EAF8EF",
+    backgroundColor: (dark ? "#173726" : "#EAF8EF"),
     borderRadius: 13,
     padding: 12,
     marginBottom: 14,
   },
 
   instructionsText: {
-    color: "#16874A",
+    color: (dark ? "#62D795" : "#16874A"),
     fontSize: 12,
     fontWeight: "700",
   },
@@ -1016,22 +1019,22 @@ const styles = StyleSheet.create({
   emptyCard: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: (dark ? "#181818" : "#FFFFFF"),
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#E8E8E8",
+    borderColor: (dark ? "#2B2B2B" : "#E8E8E8"),
     padding: 26,
   },
 
   emptyTitle: {
-    color: "#111111",
+    color: (dark ? "#FFFFFF" : "#111111"),
     fontSize: 16,
     fontWeight: "800",
     marginTop: 10,
   },
 
   emptyText: {
-    color: "#777777",
+    color: (dark ? "#A3A3A3" : "#777777"),
     fontSize: 12,
     lineHeight: 18,
     textAlign: "center",
@@ -1065,7 +1068,7 @@ const styles = StyleSheet.create({
   },
 
   bottomMessage: {
-    color: "#777777",
+    color: (dark ? "#A3A3A3" : "#777777"),
     fontSize: 11,
     lineHeight: 16,
     textAlign: "center",

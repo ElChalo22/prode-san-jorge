@@ -1,49 +1,56 @@
 // CMP-003
 
 import { Ionicons } from "@expo/vector-icons";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { lightColors, radius, spacing } from "../../theme";
+import { darkColors, lightColors, radius, spacing } from "../../theme";
+
+import { useAppAppearance } from "../../lib/appearance";
 
 type Props = {
   username: string;
-  latestNotice?: string | null;
+  unreadCount: number;
+  openGames: number;
+  onNotifications: () => void;
+  onAdmin?: () => void;
 };
 
-export default function HomeHeader({ username, latestNotice }: Props) {
+export default function HomeHeader({ username, unreadCount, openGames, onNotifications, onAdmin }: Props) {
+  const { isDark } = useAppAppearance();
+  const colors = isDark ? darkColors : lightColors;
   return (
     <>
       <View style={styles.header}>
         <View>
-          <Text style={styles.welcome}>
+          <Text style={[styles.welcome, { color: colors.text.secondary }]}>
             Bienvenido nuevamente
           </Text>
 
-          <Text style={styles.username}>
+          <Text style={[styles.username, { color: colors.text.primary }]} >
             {username} 👋
           </Text>
         </View>
 
-        <Pressable style={styles.notificationButton} onPress={() => {
-          if (latestNotice) Alert.alert("Aviso de tu prode", latestNotice);
-        }}>
-          <Ionicons
-            name="notifications-outline"
-            size={22}
-            color={lightColors.text.primary}
-          />
-
-          {latestNotice && <View style={styles.dot} />}
-        </Pressable>
+        <View style={styles.actions}>
+          <Pressable accessibilityLabel="Ver notificaciones" onPress={onNotifications}
+            style={[styles.notificationButton, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Ionicons name="notifications-outline" size={22} color={colors.text.primary} />
+            {unreadCount > 0 && <View style={styles.dot} />}
+          </Pressable>
+          {onAdmin && <Pressable accessibilityLabel="Administración" onPress={onAdmin}
+            style={[styles.notificationButton, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Ionicons name="shield-checkmark-outline" size={23} color={colors.primary} />
+          </Pressable>}
+        </View>
       </View>
 
       <View style={styles.badgeRow}>
         <View style={styles.liveBadge}>
           <View style={styles.liveDot} />
-          <Text style={styles.liveText}>EN JUEGO</Text>
+          <Text style={styles.liveText}>{openGames} {openGames === 1 ? "PRODE ABIERTO" : "PRODES ABIERTOS"}</Text>
         </View>
 
-        <Text style={styles.subtitle}>
+        <Text style={[styles.subtitle, { color: colors.text.secondary }]}>
           Elegí un Prode para participar
         </Text>
       </View>
@@ -52,6 +59,7 @@ export default function HomeHeader({ username, latestNotice }: Props) {
 }
 
 const styles = StyleSheet.create({
+  actions: { flexDirection: "row", gap: 8 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",

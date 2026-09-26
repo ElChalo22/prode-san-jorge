@@ -1,10 +1,16 @@
 import { supabase } from "@/lib/supabase";
 import { router } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useAppAppearance } from "../../lib/appearance";
+import { darkColors, lightColors } from "../../theme/colors";
+import FavoriteClubPicker, { FavoriteClub } from "../../components/FavoriteClubPicker";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput } from "react-native";
 
 export default function UsernameScreen() {
+  const { isDark } = useAppAppearance();
+  const colors = isDark ? darkColors : lightColors;
   const [username, setUsername] = useState("");
+  const [club, setClub] = useState<FavoriteClub | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -15,6 +21,7 @@ export default function UsernameScreen() {
       setMessage("Usá entre 3 y 24 letras, números o guiones bajos.");
       return;
     }
+    if (!club) { setMessage("Elegí el club del que sos hincha para continuar."); return; }
     setBusy(true);
     setMessage(null);
     try {
@@ -24,7 +31,7 @@ export default function UsernameScreen() {
         return;
       }
       const { error } = await supabase.from("profiles")
-        .update({ username: value, onboarding_completed: true })
+        .update({ username: value, favorite_team_id: club.id, onboarding_completed: true })
         .eq("id", auth.user.id).select("id").single();
       if (error) {
         setMessage(error.code === "23505" ? "Ese nombre ya está en uso. Probá con otro." : "No pudimos guardar tu nombre. Intentá nuevamente.");
@@ -40,11 +47,11 @@ export default function UsernameScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Elegí tu usuario</Text>
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
+      <Text style={[styles.title, { color: colors.text.primary }]}>Elegí tu usuario</Text>
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { color: colors.text.primary, borderColor: colors.border, backgroundColor: colors.surface }]}
         placeholder="Ejemplo: Chalo22"
         autoCapitalize="none"
         autoCorrect={false}
@@ -54,7 +61,8 @@ export default function UsernameScreen() {
         editable={!busy}
       />
 
-      {message ? <Text style={styles.message}>{message}</Text> : null}
+      <FavoriteClubPicker selectedId={club?.id ?? null} onSelect={setClub} />
+      {message ? <Text style={[styles.message, { color: colors.danger }]}>{message}</Text> : null}
 
       <Pressable
         style={styles.button}
@@ -63,16 +71,18 @@ export default function UsernameScreen() {
       >
         {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Guardar y continuar</Text>}
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: "#FFFFFF",
-    justifyContent: "center",
     paddingHorizontal: 24,
+    paddingTop: 55,
+    paddingBottom: 50,
+    gap: 12,
   },
   title: {
     fontSize: 30,

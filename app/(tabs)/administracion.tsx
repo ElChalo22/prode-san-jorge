@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { supabase } from "../../lib/supabase";
 import { useStaffRole } from "../../lib/useStaffRole";
+import { useAppAppearance } from "../../lib/appearance";
 import { darkColors, lightColors } from "../../theme/colors";
 
 type Payment = {
@@ -26,7 +27,8 @@ type ReviewPrediction = { prediction: string; secondary_prediction: string | nul
 const one = <T,>(value: T | T[] | null): T | null => Array.isArray(value) ? value[0] ?? null : value;
 
 export default function AdministracionScreen() {
-  const colors = useColorScheme() === "dark" ? darkColors : lightColors;
+  const { isDark } = useAppAppearance();
+  const colors = isDark ? darkColors : lightColors;
   const { role, loading: checkingRole } = useStaffRole();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);

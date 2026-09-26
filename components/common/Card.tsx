@@ -3,7 +3,9 @@
 import React from "react";
 import { StyleSheet, View, ViewProps } from "react-native";
 
-import { lightColors, radius, shadows, spacing } from "../../theme";
+import { darkColors, lightColors, radius, shadows, spacing } from "../../theme";
+
+import { useAppAppearance } from "../../lib/appearance";
 
 type CardProps = ViewProps & {
   children: React.ReactNode;
@@ -14,9 +16,11 @@ export default function Card({
   style,
   ...props
 }: CardProps) {
+  const { isDark } = useAppAppearance();
+  const colors = isDark ? darkColors : lightColors;
   return (
     <View
-      style={[styles.card, style]}
+      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, style]}
       {...props}
     >
       {children}

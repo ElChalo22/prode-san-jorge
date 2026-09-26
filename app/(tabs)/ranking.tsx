@@ -1,3 +1,4 @@
+import { useAppAppearance } from "../../lib/appearance";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -8,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from "react-native";
 
@@ -98,8 +98,7 @@ function getPositionLabel(position: number) {
 }
 
 export default function RankingScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark } = useAppAppearance();
   const colors = isDark ? COLORS.dark : COLORS.light;
 
   const [games, setGames] = useState<ProdeGame[]>([]);
