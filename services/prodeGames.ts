@@ -24,6 +24,7 @@ export interface ProdeGameWithDetails extends ProdeGame {
 const PRODE_GAME_DETAILS_SELECT = `
   *,
   prode_group:prode_groups!prode_games_prode_group_id_fkey(*),
+  express_game_matches(match_id),
   prode_game_matchdays(
     matchday:matchdays!prode_game_matchdays_matchday_id_fkey(
       *,
@@ -37,6 +38,7 @@ const PRODE_GAME_DETAILS_SELECT = `
 `;
 
 function normalizeProdeGame(game: any): ProdeGameWithDetails {
+  const selected = new Set<string>((game.express_game_matches ?? []).map((item: any) => item.match_id));
   return {
     ...game,
     matchdays: (game.prode_game_matchdays ?? [])
@@ -44,7 +46,9 @@ function normalizeProdeGame(game: any): ProdeGameWithDetails {
       .filter(Boolean)
       .map((matchday: any) => ({
         ...matchday,
-        matches: [...(matchday.matches ?? [])].sort(
+        matches: [...(matchday.matches ?? [])]
+          .filter((match: Match) => game.game_type !== "express" || selected.has(match.id))
+          .sort(
           (firstMatch: Match, secondMatch: Match) =>
             new Date(firstMatch.kickoff_at).getTime() -
             new Date(secondMatch.kickoff_at).getTime(),

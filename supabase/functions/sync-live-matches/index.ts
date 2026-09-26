@@ -31,8 +31,6 @@ const supabase = createClient(
   },
 );
 
-const TARGET_LEAGUE_ID = "hc";
-
 // Ventana chica: alcanza para partidos recientes/en vivo/próximos
 // sin hacer el trabajo pesado del importador general.
 const LOOKBACK_HOURS = 6;
@@ -192,12 +190,8 @@ async function fetchPromiedosGames(
   const data =
     (await response.json()) as PromiedosGamesResponse;
 
-  const league =
-    data.leagues?.find(
-      (item) => item.id === TARGET_LEAGUE_ID,
-    ) ?? null;
-
-  return league?.games ?? [];
+  // Express puede mezclar competiciones; buscar todos los partidos del día.
+  return (data.leagues ?? []).flatMap((league) => league.games ?? []);
 }
 
 async function getRelevantMatches(): Promise<DbMatch[]> {

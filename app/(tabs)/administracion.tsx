@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
 import { supabase } from "../../lib/supabase";
 import { useStaffRole } from "../../lib/useStaffRole";
 import { darkColors, lightColors } from "../../theme/colors";
@@ -13,6 +13,7 @@ type Payment = {
   status: string;
   participations: { user_id: string; prode_games: { name: string }[] }[];
 };
+type CatalogMatch = { id: string; competition: string; home: string; away: string; kickoff_at: string };
 
 export default function AdministracionScreen() {
   const colors = useColorScheme() === "dark" ? darkColors : lightColors;
@@ -23,7 +24,11 @@ export default function AdministracionScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [section, setSection] = useState<"resumen" | "pagos" | "prodes" | "equipo">("resumen");
+  const [section, setSection] = useState<"resumen" | "pagos" | "prodes" | "express" | "equipo">("resumen");
+  const [catalog, setCatalog] = useState<CatalogMatch[]>([]);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [expressName, setExpressName] = useState("");
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
 
   const load = useCallback(async () => {
     if (!role) return;
@@ -66,6 +71,36 @@ export default function AdministracionScreen() {
     }
   };
 
+  const loadCatalog = async () => {
+    setLoadingCatalog(true);
+    setError(null);
+    const { data, error: catalogError } = await supabase.functions.invoke("express-catalog", { body: {} });
+    if (catalogError || data?.error) setError(data?.error ?? catalogError?.message ?? "No se pudo consultar Promiedos.");
+    else setCatalog(data?.matches ?? []);
+    setLoadingCatalog(false);
+  };
+
+  const publishExpress = async () => {
+    if (chosen.length < 1 || !expressName.trim()) {
+      Alert.alert("Faltan datos", "Poné un nombre y elegí al menos un partido.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const { error: publishError } = await supabase.rpc("create_express_game", {
+      game_name: expressName.trim(), selected_match_ids: chosen, fee: 0,
+    });
+    if (publishError) setError(publishError.message);
+    else {
+      setChosen([]);
+      setExpressName("");
+      setSection("prodes");
+      Alert.alert("Prode Express publicado", "Ya está disponible para los jugadores.");
+      await load();
+    }
+    setBusy(false);
+  };
+
   if (checkingRole) return <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>;
   if (!role) return <View style={[styles.center, { backgroundColor: colors.background }]}>
     <Ionicons name="lock-closed-outline" size={36} color={colors.text.secondary} />
@@ -88,11 +123,11 @@ export default function AdministracionScreen() {
     {error ? <Text style={{ color: colors.danger }}>{error}</Text> : null}
 
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sections}>
-      {(["resumen", "pagos", "prodes", ...(role === "superadmin" ? ["equipo"] : [])] as typeof section[]).map((item) =>
-        <Pressable key={item} onPress={() => setSection(item)} accessibilityRole="tab" accessibilityState={{ selected: section === item }}
+      {(["resumen", "pagos", "prodes", "express", ...(role === "superadmin" ? ["equipo"] : [])] as typeof section[]).map((item) =>
+        <Pressable key={item} onPress={() => { setSection(item); if (item === "express" && !catalog.length) void loadCatalog(); }} accessibilityRole="tab" accessibilityState={{ selected: section === item }}
           style={[styles.section, { backgroundColor: section === item ? colors.primary : colors.surface, borderColor: colors.border }]}>
           <Text style={{ color: section === item ? "#FFFFFF" : colors.text.primary, fontWeight: "700" }}>
-            {item === "resumen" ? "Resumen" : item === "pagos" ? "Pagos" : item === "prodes" ? "Prodes" : "Equipo"}
+            {item === "resumen" ? "Resumen" : item === "pagos" ? "Pagos" : item === "prodes" ? "Prodes" : item === "express" ? "Crear Express" : "Equipo"}
           </Text>
         </Pressable>)}
     </ScrollView>
@@ -123,6 +158,38 @@ export default function AdministracionScreen() {
         <Text style={[styles.itemName, { color: colors.text.primary }]}>{game.name}</Text>
         <Text style={{ color: colors.text.secondary }}>Estado: {game.status === "open" ? "Abierto" : game.status === "closed" ? "Cerrado" : game.status}</Text>
       </View>)}
+    </> : null}
+
+    {section === "express" ? <>
+      <Text style={[styles.heading, { color: colors.text.primary }]}>Nuevo Prode Express</Text>
+      <Text style={{ color: colors.text.secondary }}>Elegí partidos de Promiedos. Se publica al crearlo y cierra 15 minutos antes del primero. La Liga Argentina sigue automática. Por ahora, entrada gratis.</Text>
+      <TextInput placeholder="Nombre, por ejemplo: Express del miércoles" placeholderTextColor={colors.text.secondary}
+        value={expressName} onChangeText={setExpressName} maxLength={80}
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <View style={styles.playerRow}>
+        <Text style={{ flex: 1, color: colors.text.primary, fontWeight: "700" }}>{chosen.length} partidos elegidos</Text>
+        <Pressable onPress={() => void loadCatalog()} disabled={loadingCatalog}>
+          <Text style={{ color: colors.primary }}>{loadingCatalog ? "Buscando…" : "Actualizar partidos"}</Text>
+        </Pressable>
+      </View>
+      {loadingCatalog ? <ActivityIndicator color={colors.primary} /> : null}
+      {!loadingCatalog && catalog.length === 0 ? <Text style={{ color: colors.text.secondary }}>No hay partidos disponibles para los próximos 7 días.</Text> : null}
+      {catalog.map((match) => {
+        const selected = chosen.includes(match.id);
+        return <Pressable key={match.id} accessibilityRole="checkbox" accessibilityState={{ checked: selected }}
+          onPress={() => setChosen((current) => selected ? current.filter((id) => id !== match.id) : [...current, match.id])}
+          style={[styles.card, styles.playerRow, { backgroundColor: colors.surface, borderColor: selected ? colors.primary : colors.border }]}>
+          <Ionicons name={selected ? "checkbox" : "square-outline"} color={colors.primary} size={23} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.text.secondary, fontSize: 12 }}>{match.competition} · {new Date(match.kickoff_at).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} ARG</Text>
+            <Text style={[styles.itemName, { color: colors.text.primary }]}>{match.home} vs. {match.away}</Text>
+          </View>
+        </Pressable>;
+      })}
+      <Pressable disabled={busy || chosen.length < 1 || !expressName.trim()} onPress={() => void publishExpress()}
+        style={[styles.button, { backgroundColor: colors.primary, opacity: busy || chosen.length < 1 || !expressName.trim() ? 0.5 : 1, alignItems: "center", marginTop: 16 }]}>
+        <Text style={styles.buttonText}>Publicar Prode Express</Text>
+      </Pressable>
     </> : null}
 
     {section === "pagos" ? <>
