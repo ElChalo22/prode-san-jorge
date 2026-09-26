@@ -41,10 +41,9 @@ Deno.serve(async (request) => {
     const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).single();
     if (!profile || !["admin", "superadmin"].includes(profile.role)) return reply({ error: "Acceso denegado" }, 403);
 
+    const body = await request.json().catch(() => ({})) as { action?: string; provider_ids?: string[] };
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires",
       year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-    const list = new Map<string, { id: string; competition: string; home: string; away: string;
-      kickoff_at: string; home_logo: string; away_logo: string }>();
     const candidates = new Map<string, { league: League; game: Game; day: string; starts: string }>();
     for (let offset = 0; offset < 7; offset++) {
       const date = new Date(`${today}T12:00:00Z`);
@@ -62,25 +61,31 @@ Deno.serve(async (request) => {
         }
       }
     }
-    // Cargar primero las competiciones más usadas; acotar las escrituras por consulta.
-    const priority = /champions|libertadores|sudamericana|premier|liga profesional|primera divisi[oó]n|serie a|bundesliga|la liga|europa league/i;
-    const selected = [...candidates.values()].sort((a, b) =>
-      Number(priority.test(b.league.name)) - Number(priority.test(a.league.name)) ||
-      a.starts.localeCompare(b.starts)).slice(0, 60);
+    if (body.action !== "prepare") {
+      return reply({ matches: [...candidates.values()].map(({ league, game, starts }) => ({
+        id: game.id, competition_id: league.id, competition: league.name,
+        round: game.stage_round_name?.trim() || "Sin fecha", home: game.teams[0].name,
+        away: game.teams[1].name, kickoff_at: starts,
+      })).sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at)) });
+    }
+    const ids = body.provider_ids;
+    if (!Array.isArray(ids) || !ids.length || ids.length > 30 ||
+      ids.some((id) => typeof id !== "string") || new Set(ids).size !== ids.length ||
+      ids.some((id) => !candidates.has(id))) {
+      return reply({ error: "La selección contiene partidos inválidos o ya iniciados" }, 400);
+    }
+    const selected = ids.map((id) => candidates.get(id)!);
+    const resolved = new Map<string, string>();
     const { data: existing, error: existingError } = await db.from("matches")
-      .select("id, provider_id, status").eq("provider", "promiedos")
-      .in("provider_id", selected.map(({ game }) => game.id));
+      .select("id, provider_id, status").eq("provider", "promiedos").in("provider_id", ids);
     if (existingError) throw existingError;
     const existingIds = new Map((existing ?? []).map((match) => [match.provider_id, match]));
     for (let index = 0; index < selected.length; index += 5) {
       await Promise.all(selected.slice(index, index + 5).map(async ({ league, game, day, starts }) => {
           const alreadyImported = existingIds.get(game.id);
           if (alreadyImported) {
-            if (alreadyImported.status !== "scheduled") return;
-            list.set(game.id, { id: alreadyImported.id, competition: league.name,
-              home: game.teams[0].name, away: game.teams[1].name, kickoff_at: starts,
-              home_logo: `${api}/images/team/${game.teams[0].id}/4`,
-              away_logo: `${api}/images/team/${game.teams[1].id}/4` });
+            if (alreadyImported.status !== "scheduled") throw new Error("Un partido elegido ya comenzó");
+            resolved.set(game.id, alreadyImported.id);
             return;
           }
           const competitionId = await upsert("competitions", { provider: "promiedos", provider_id: league.id,
@@ -96,13 +101,10 @@ Deno.serve(async (request) => {
           const id = await upsert("matches", { provider: "promiedos", provider_id: game.id,
             matchday_id: matchdayId, home_team_id: teamIds[0], away_team_id: teamIds[1],
             kickoff_at: starts, status: "scheduled" }, "provider,provider_id");
-          list.set(game.id, { id, competition: league.name, home: game.teams[0].name,
-            away: game.teams[1].name, kickoff_at: starts,
-            home_logo: `${api}/images/team/${game.teams[0].id}/4`,
-            away_logo: `${api}/images/team/${game.teams[1].id}/4` });
+          resolved.set(game.id, id);
       }));
     }
-    return reply({ matches: [...list.values()].sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at)) });
+    return reply({ match_ids: ids.map((id) => resolved.get(id)) });
   } catch (error) {
     console.error("Error cargando catálogo Express", error);
     return reply({ error: error instanceof Error ? error.message : "No se pudieron cargar los partidos" }, 500);

@@ -13,7 +13,8 @@ type Payment = {
   status: string;
   participations: { user_id: string; prode_games: { name: string }[] }[];
 };
-type CatalogMatch = { id: string; competition: string; home: string; away: string; kickoff_at: string };
+type CatalogMatch = { id: string; competition_id: string; competition: string; round: string;
+  home: string; away: string; kickoff_at: string };
 
 export default function AdministracionScreen() {
   const colors = useColorScheme() === "dark" ? darkColors : lightColors;
@@ -28,6 +29,7 @@ export default function AdministracionScreen() {
   const [catalog, setCatalog] = useState<CatalogMatch[]>([]);
   const [chosen, setChosen] = useState<string[]>([]);
   const [expressName, setExpressName] = useState("");
+  const [matchQuery, setMatchQuery] = useState("");
   const [loadingCatalog, setLoadingCatalog] = useState(false);
 
   const load = useCallback(async () => {
@@ -87,8 +89,16 @@ export default function AdministracionScreen() {
     }
     setBusy(true);
     setError(null);
+    const { data: prepared, error: prepareError } = await supabase.functions.invoke("express-catalog", {
+      body: { action: "prepare", provider_ids: chosen },
+    });
+    if (prepareError || prepared?.error || prepared?.match_ids?.length !== chosen.length) {
+      setError(prepared?.error ?? prepareError?.message ?? "No se pudieron verificar los partidos elegidos.");
+      setBusy(false);
+      return;
+    }
     const { error: publishError } = await supabase.rpc("create_express_game", {
-      game_name: expressName.trim(), selected_match_ids: chosen, fee: 0,
+      game_name: expressName.trim(), selected_match_ids: prepared.match_ids, fee: 0,
     });
     if (publishError) setError(publishError.message);
     else {
@@ -110,6 +120,19 @@ export default function AdministracionScreen() {
 
   const pending = payments.filter((payment) => payment.status === "pending");
   const matches = players.filter((player) => player.username?.toLowerCase().includes(query.trim().toLowerCase()));
+  const visibleMatches = catalog.filter((match) =>
+    `${match.home} ${match.away} ${match.competition} ${match.round}`.toLocaleLowerCase("es")
+      .includes(matchQuery.trim().toLocaleLowerCase("es")));
+  const rounds = new Map<string, { name: string; round: string; ids: string[] }>();
+  for (const match of catalog) {
+    const key = `${match.competition_id}:${match.round}`;
+    const group = rounds.get(key) ?? { name: match.competition, round: match.round, ids: [] };
+    group.ids.push(match.id);
+    rounds.set(key, group);
+  }
+  const groupQuery = matchQuery.trim().toLocaleLowerCase("es");
+  const visibleRounds = [...rounds.entries()].filter(([, group]) =>
+    !groupQuery || `${group.name} ${group.round}`.toLocaleLowerCase("es").includes(groupQuery));
 
   return <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={styles.content}
     refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void load()} tintColor={colors.primary} />}>
@@ -166,6 +189,9 @@ export default function AdministracionScreen() {
       <TextInput placeholder="Nombre, por ejemplo: Express del miércoles" placeholderTextColor={colors.text.secondary}
         value={expressName} onChangeText={setExpressName} maxLength={80}
         style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
+      <TextInput placeholder="Buscar equipo, partido o competencia" placeholderTextColor={colors.text.secondary}
+        value={matchQuery} onChangeText={setMatchQuery}
+        style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
       <View style={styles.playerRow}>
         <Text style={{ flex: 1, color: colors.text.primary, fontWeight: "700" }}>{chosen.length} partidos elegidos</Text>
         <Pressable onPress={() => void loadCatalog()} disabled={loadingCatalog}>
@@ -174,18 +200,43 @@ export default function AdministracionScreen() {
       </View>
       {loadingCatalog ? <ActivityIndicator color={colors.primary} /> : null}
       {!loadingCatalog && catalog.length === 0 ? <Text style={{ color: colors.text.secondary }}>No hay partidos disponibles para los próximos 7 días.</Text> : null}
-      {catalog.map((match) => {
+      {catalog.length > 0 ? <>
+        <Text style={[styles.heading, { color: colors.text.primary }]}>Agregar fecha completa</Text>
+        <Text style={{ color: colors.text.secondary }}>Incluye todos los partidos de esa competencia y fecha dentro de los próximos 7 días, aunque se jueguen en días distintos.</Text>
+        {visibleRounds.slice(0, 40).map(([key, group]) => {
+          const complete = group.ids.every((id) => chosen.includes(id));
+          return <Pressable key={key} onPress={() => {
+            const next = complete ? chosen.filter((id) => !group.ids.includes(id))
+              : [...new Set([...chosen, ...group.ids])];
+            if (next.length > 30) Alert.alert("Límite de partidos", "Un Prode Express admite hasta 30 partidos.");
+            else setChosen(next);
+          }}
+            style={[styles.card, styles.playerRow, { backgroundColor: colors.surface, borderColor: complete ? colors.primary : colors.border }]}>
+            <Ionicons name={complete ? "checkbox" : "add-circle-outline"} color={colors.primary} size={22} />
+            <View style={{ flex: 1 }}><Text style={[styles.itemName, { color: colors.text.primary }]}>{group.name} · {group.round}</Text>
+              <Text style={{ color: colors.text.secondary }}>{group.ids.length} partidos</Text></View>
+            <Text style={{ color: colors.primary }}>{complete ? "Quitar" : "Agregar"}</Text>
+          </Pressable>;
+        })}
+        {visibleRounds.length > 40 ? <Text style={{ color: colors.text.secondary }}>Buscá una competencia para ver más fechas.</Text> : null}
+      </> : null}
+      <Text style={[styles.heading, { color: colors.text.primary }]}>Partidos individuales</Text>
+      {visibleMatches.slice(0, 80).map((match) => {
         const selected = chosen.includes(match.id);
         return <Pressable key={match.id} accessibilityRole="checkbox" accessibilityState={{ checked: selected }}
-          onPress={() => setChosen((current) => selected ? current.filter((id) => id !== match.id) : [...current, match.id])}
+          onPress={() => {
+            if (!selected && chosen.length >= 30) Alert.alert("Límite de partidos", "Un Prode Express admite hasta 30 partidos.");
+            else setChosen((current) => selected ? current.filter((id) => id !== match.id) : [...current, match.id]);
+          }}
           style={[styles.card, styles.playerRow, { backgroundColor: colors.surface, borderColor: selected ? colors.primary : colors.border }]}>
           <Ionicons name={selected ? "checkbox" : "square-outline"} color={colors.primary} size={23} />
           <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.text.secondary, fontSize: 12 }}>{match.competition} · {new Date(match.kickoff_at).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} ARG</Text>
+            <Text style={{ color: colors.text.secondary, fontSize: 12 }}>{match.competition} · {match.round} · {new Date(match.kickoff_at).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} ARG</Text>
             <Text style={[styles.itemName, { color: colors.text.primary }]}>{match.home} vs. {match.away}</Text>
           </View>
         </Pressable>;
       })}
+      {visibleMatches.length > 80 ? <Text style={{ color: colors.text.secondary }}>Mostrando 80 partidos. Usá el buscador para encontrar otro.</Text> : null}
       <Pressable disabled={busy || chosen.length < 1 || !expressName.trim()} onPress={() => void publishExpress()}
         style={[styles.button, { backgroundColor: colors.primary, opacity: busy || chosen.length < 1 || !expressName.trim() ? 0.5 : 1, alignItems: "center", marginTop: 16 }]}>
         <Text style={styles.buttonText}>Publicar Prode Express</Text>
