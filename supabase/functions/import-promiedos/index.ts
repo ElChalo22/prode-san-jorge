@@ -87,8 +87,8 @@ interface FullRoundResult {
 // =========================================================
 
 const TARGET_LEAGUE_ID = "hc";
-const SEARCH_DAYS_BEFORE = 4;
-const SEARCH_DAYS_AFTER = 4;
+const SEARCH_DAYS_BEFORE = 7;
+const SEARCH_DAYS_AFTER = 14;
 const DOUBLE_CHANCE_LIMIT = 2;
 
 // =========================================================
@@ -202,28 +202,47 @@ function findLeague(
 
 async function detectRound(
   referenceDate: string,
+  fetchDay = fetchGames,
 ): Promise<{
   league: PromiedosLeague;
   roundName: string;
 }> {
-  // Primero busca hoy y hacia adelante. Si no hay una fecha próxima,
-  // revisa los días anteriores para mantener actualizada la fecha en curso.
-  const offsets = [0, 1, 2, 3, 4, -1, -2, -3, -4];
+  // Busca una próxima fecha aún abierta para pronosticar. Los resultados
+  // de fechas en juego se mantienen con sync-live-matches.
+  const offsets = Array.from({ length: SEARCH_DAYS_AFTER + 1 }, (_, i) => i);
 
+  const skippedRounds = new Set<string>();
   for (const offset of offsets) {
     const date = addDays(referenceDate, offset);
-    const response = await fetchGames(date);
+    const response = await fetchDay(date);
     const league = findLeague(response, TARGET_LEAGUE_ID);
 
     if (!league) {
       continue;
     }
 
-    const firstGame = league.games?.find(
-      (game) => game.stage_round_name,
+    const candidates = (league.games ?? []).filter(
+      (game) => game.stage_round_name && mapMatchStatus(game.status) === "scheduled"
+        && parsePromiedosDateTime(game.start_time).getTime() > Date.now() + 5 * 60 * 1000,
     );
 
-    if (firstGame?.stage_round_name) {
+    for (const firstGame of candidates) {
+      if (!firstGame.stage_round_name) continue;
+      const round = firstGame.stage_round_name.trim();
+      if (skippedRounds.has(round)) continue;
+      // Una fecha ya empezada no bloquea la publicación de la próxima.
+      const { data: storedRound, error: roundError } = await supabase.from("matchdays")
+        .select("starts_at").eq("provider", "promiedos")
+        .eq("provider_id", `${TARGET_LEAGUE_ID}:${round}`).maybeSingle();
+      if (roundError) throw roundError;
+      if (storedRound?.starts_at && new Date(storedRound.starts_at).getTime() <= Date.now() + 5 * 60 * 1000) {
+        skippedRounds.add(round); continue;
+      }
+      const { data: removedGames, error: removedError } = await supabase.from("prode_games")
+        .select("id").eq("game_type", "automatic").eq("name", `Liga Profesional - ${round}`)
+        .not("archived_at", "is", null).limit(1);
+      if (removedError) throw removedError;
+      if (removedGames?.length) { skippedRounds.add(round); continue; }
       return {
         league,
         roundName: firstGame.stage_round_name.trim(),
@@ -232,14 +251,19 @@ async function detectRound(
   }
 
   throw new Error(
-    "No encontramos una fecha de Liga Profesional entre los 4 días anteriores y los 4 próximos.",
+    "Promiedos todavía no publicó una próxima fecha con partidos por jugar en los próximos 14 días.",
   );
 }
 
 async function fetchFullRound(
   referenceDate: string,
 ): Promise<FullRoundResult> {
-  const detected = await detectRound(referenceDate);
+  const cache = new Map<string, Promise<PromiedosGamesResponse>>();
+  const fetchDay = (date: string) => {
+    if (!cache.has(date)) cache.set(date, fetchGames(date));
+    return cache.get(date)!;
+  };
+  const detected = await detectRound(referenceDate, fetchDay);
 
   console.log("");
   console.log(
@@ -264,7 +288,7 @@ async function fetchFullRound(
   ) {
     const date = addDays(referenceDate, offset);
 
-    const response = await fetchGames(date);
+    const response = await fetchDay(date);
 
     const league = findLeague(
       response,
@@ -391,7 +415,7 @@ async function upsertCompetition(
       },
     )
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) {
     throw new Error(
@@ -594,7 +618,7 @@ async function upsertProdeGame(
 
   const closesAt = new Date(
     firstKickoff.getTime() -
-      15 * 60 * 1000,
+      5 * 60 * 1000,
   ).toISOString();
 
   const status =
@@ -611,6 +635,10 @@ async function upsertProdeGame(
     );
 
   if (existingId) {
+    const { data: existing, error: existingError } = await supabase.from("prode_games")
+      .select("status,archived_at").eq("id", existingId).single();
+    if (existingError) throw existingError;
+    if (existing.archived_at || ["finished", "cancelled"].includes(existing.status)) return existingId;
     const { count, error: countError } = await supabase.from("participations")
       .select("id", { head: true, count: "exact" }).eq("prode_game_id", existingId);
     if (countError) throw countError;
@@ -752,16 +780,21 @@ async function main(referenceDate = getArgentinaDate()) {
     );
   }
 
-  const prodeGameId =
-    await upsertProdeGame(
-      fullRound.roundName,
-      fullRound.games,
-    );
+  const { data: publishSetting, error: publishSettingError } = await supabase
+    .from("app_settings")
+    .select("automatic_argentina_prodes_enabled")
+    .limit(1)
+    .single();
+  if (publishSettingError) throw publishSettingError;
 
-  await linkMatchdayToProde(
-    prodeGameId,
-    matchdayId,
-  );
+  let prodeGameId: string | null = null;
+  if (publishSetting?.automatic_argentina_prodes_enabled) {
+    if (fullRound.games.length < 15) throw new Error(`Fecha incompleta: Promiedos publicó ${fullRound.games.length}/15 partidos. Se publicará cuando esté completa.`);
+    prodeGameId = await upsertProdeGame(fullRound.roundName, fullRound.games);
+    await linkMatchdayToProde(prodeGameId, matchdayId);
+    const { error: lifecycleError } = await supabase.rpc("refresh_prode_lifecycle");
+    if (lifecycleError) throw lifecycleError;
+  }
 
   const firstGame =
     fullRound.games[0];
@@ -775,7 +808,7 @@ async function main(referenceDate = getArgentinaDate()) {
     parsePromiedosDateTime(
       firstGame.start_time,
     ).getTime() -
-      15 * 60 * 1000,
+      5 * 60 * 1000,
   );
 
   console.log("");
@@ -807,7 +840,7 @@ async function main(referenceDate = getArgentinaDate()) {
     )}`,
   );
   console.log(
-    "📱 Prode creado/actualizado y vinculado.",
+    prodeGameId ? "📱 Prode creado/actualizado y vinculado." : "📱 Publicación automática desactivada.",
   );
   console.log(
     "==========================================",
