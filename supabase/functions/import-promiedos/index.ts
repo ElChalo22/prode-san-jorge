@@ -91,6 +91,25 @@ const SEARCH_DAYS_BEFORE = 7;
 const SEARCH_DAYS_AFTER = 14;
 const DOUBLE_CHANCE_LIMIT = 2;
 
+// Horarios oficiales de AFA para la Fecha 16; el feed conserva el cronograma anterior.
+const OFFICIAL_START_TIME_OVERRIDES: Record<string, string> = {
+  egddcaa: "05-11-2026 15:00",
+  egddbjj: "05-11-2026 19:15",
+  egddcab: "06-11-2026 15:00",
+  egddcag: "06-11-2026 19:15",
+  egddcba: "06-11-2026 19:15",
+  egddcaj: "06-11-2026 19:15",
+  egddcae: "06-11-2026 22:00",
+  egddcac: "06-11-2026 22:00",
+  egddcah: "07-11-2026 15:00",
+  egddcbc: "07-11-2026 15:00",
+  egddcad: "07-11-2026 17:30",
+  egddbji: "07-11-2026 17:30",
+  egddcaf: "07-11-2026 17:30",
+  egddcai: "07-11-2026 22:00",
+  egddcbb: "08-11-2026 19:30",
+};
+
 // =========================================================
 // FECHAS
 // =========================================================
@@ -186,7 +205,14 @@ async function fetchGames(
     );
   }
 
-  return (await response.json()) as PromiedosGamesResponse;
+  const payload = (await response.json()) as PromiedosGamesResponse;
+  for (const league of payload.leagues ?? []) {
+    for (const game of league.games ?? []) {
+      const officialStartTime = OFFICIAL_START_TIME_OVERRIDES[game.id];
+      if (officialStartTime) game.start_time = officialStartTime;
+    }
+  }
+  return payload;
 }
 
 function findLeague(
