@@ -579,7 +579,7 @@ async function upsertProdeGame(
 
   const closesAt = new Date(
     firstKickoff.getTime() -
-      15 * 60 * 1000,
+      5 * 60 * 1000,
   ).toISOString();
 
   const name = `Liga Profesional - ${roundName}`;
@@ -752,7 +752,7 @@ async function main() {
     parsePromiedosDateTime(
       firstGame.start_time,
     ).getTime() -
-      15 * 60 * 1000,
+      5 * 60 * 1000,
   );
 
   console.log("");
