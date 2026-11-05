@@ -397,7 +397,7 @@ export default function AdministracionScreen() {
 
     {section === "express" ? <>
       <Text style={[styles.heading, { color: colors.text.primary }]}>Nuevo Prode Express</Text>
-      <Text style={{ color: colors.text.secondary }}>Elegí partidos, la cuenta de cobro, el precio y la comisión de esta fecha. Cierra 15 minutos antes del primer partido.</Text>
+      <Text style={{ color: colors.text.secondary }}>Elegí partidos, la cuenta de cobro, el precio y la comisión de esta fecha. Cierra 5 minutos antes del primer partido.</Text>
       <TextInput placeholder="Nombre, por ejemplo: Express del miércoles" placeholderTextColor={colors.text.secondary}
         value={expressName} onChangeText={setExpressName} maxLength={80}
         style={[styles.input, { backgroundColor: colors.surface, color: colors.text.primary, borderColor: colors.border }]} />
