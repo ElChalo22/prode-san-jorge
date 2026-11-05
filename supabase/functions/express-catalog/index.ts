@@ -56,7 +56,7 @@ Deno.serve(async (request) => {
         for (const game of league.games ?? []) {
           if (game.teams.length < 2 || candidates.has(game.id)) continue;
           const starts = kickoff(game.start_time);
-          if (new Date(starts).getTime() < Date.now() + 15 * 60000) continue;
+          if (new Date(starts).getTime() < Date.now() + 5 * 60000) continue;
           candidates.set(game.id, { league, game, day, starts });
         }
       }
