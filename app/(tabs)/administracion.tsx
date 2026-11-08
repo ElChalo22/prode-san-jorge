@@ -9,7 +9,7 @@ import { darkColors, lightColors } from "../../theme/colors";
 
 type IdentityRequest = { id: string; user_id: string; file_path: string; created_at: string };
 type Feedback = { id: string; user_id: string; kind: string; message: string; file_paths: string[]; created_at: string };
-type RewardClaim = { id: string; user_id: string; amount: number; created_at: string; milestone: number; reward_type: "cash" | "jacket" };
+type RewardClaim = { id: string; user_id: string; amount: number; created_at: string; milestone: number; reward_type: "cash" | "jacket"; team: { name: string } | null };
 type TransferAccount = { id: string; label: string; alias: string | null; cbu: string | null; holder: string | null; active: boolean };
 type Payment = {
   id: string;
@@ -83,7 +83,7 @@ export default function AdministracionScreen() {
           .eq("status", "payment_under_review").order("submitted_at", { ascending: false }).limit(100),
         supabase.from("identity_requests").select("id,user_id,file_path,created_at").eq("status", "pending").order("created_at", { ascending: false }),
         supabase.from("user_feedback").select("id,user_id,kind,message,file_paths,created_at").eq("status", "pending").order("created_at", { ascending: false }),
-        supabase.from("reward_claims").select("id,user_id,amount,created_at,milestone,reward_type").eq("status", "pending").order("created_at", { ascending: false }),
+        supabase.from("reward_claims").select("id,user_id,amount,created_at,milestone,reward_type,team:teams!reward_claims_team_id_fkey(name)").eq("status", "pending").order("created_at", { ascending: false }),
         supabase.from("transfer_accounts").select("id,label,alias,cbu,holder,active").eq("active", true).order("created_at", { ascending: false }),
       ]);
       if (paymentResult.error) throw paymentResult.error;
@@ -537,7 +537,7 @@ export default function AdministracionScreen() {
         return <View key={item.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.itemName, { color: colors.text.primary }]}>
             @{players.find((player) => player.id === item.user_id)?.username ?? "jugador"} ·
-            {isJacket ? " Campera personalizada · 200 aciertos" : ` ARS ${item.amount} · ${item.milestone} aciertos`}
+            {isJacket ? ` Campera personalizada · ${item.team?.name ?? "club sin elegir"} · 200 aciertos` : ` ARS ${item.amount} · ${item.milestone} aciertos`}
           </Text>
           <Pressable disabled={busy} onPress={() => Alert.alert(
             isJacket ? "Confirmar entrega" : "Confirmar pago",
