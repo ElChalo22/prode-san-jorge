@@ -9,7 +9,7 @@ import { darkColors, lightColors } from "../../theme/colors";
 
 type IdentityRequest = { id: string; user_id: string; file_path: string; created_at: string };
 type Feedback = { id: string; user_id: string; kind: string; message: string; file_paths: string[]; created_at: string };
-type CashReward = { id: string; user_id: string; amount: number; created_at: string };
+type RewardClaim = { id: string; user_id: string; amount: number; created_at: string; milestone: number; reward_type: "cash" | "jacket" };
 type TransferAccount = { id: string; label: string; alias: string | null; cbu: string | null; holder: string | null; active: boolean };
 type Payment = {
   id: string;
@@ -36,7 +36,7 @@ export default function AdministracionScreen() {
   const { role, loading: checkingRole } = useStaffRole();
   const [identities, setIdentities] = useState<IdentityRequest[]>([]);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
-  const [cashRewards, setCashRewards] = useState<CashReward[]>([]);
+  const [rewardClaims, setRewardClaims] = useState<RewardClaim[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [selectedReview, setSelectedReview] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export default function AdministracionScreen() {
           .eq("status", "payment_under_review").order("submitted_at", { ascending: false }).limit(100),
         supabase.from("identity_requests").select("id,user_id,file_path,created_at").eq("status", "pending").order("created_at", { ascending: false }),
         supabase.from("user_feedback").select("id,user_id,kind,message,file_paths,created_at").eq("status", "pending").order("created_at", { ascending: false }),
-        supabase.from("reward_claims").select("id,user_id,amount,created_at").eq("status", "pending").order("created_at", { ascending: false }),
+        supabase.from("reward_claims").select("id,user_id,amount,created_at,milestone,reward_type").eq("status", "pending").order("created_at", { ascending: false }),
         supabase.from("transfer_accounts").select("id,label,alias,cbu,holder,active").eq("active", true).order("created_at", { ascending: false }),
       ]);
       if (paymentResult.error) throw paymentResult.error;
@@ -96,7 +96,7 @@ export default function AdministracionScreen() {
       if (accountResult.error) throw accountResult.error;
       setIdentities(identityResult.data ?? []);
       setFeedback(feedbackResult.data ?? []);
-      setCashRewards(rewardResult.data ?? []);
+      setRewardClaims((rewardResult.data ?? []) as RewardClaim[]);
       setPayments((paymentResult.data ?? []) as Payment[]);
       setGames(gameResult.data ?? []);
       setAccounts(accountResult.data ?? []);
@@ -212,6 +212,12 @@ export default function AdministracionScreen() {
     if (requestError) setError(requestError.message); else await load();
     setBusy(false);
   };
+  const markJacketDelivered = async (id: string) => {
+    setBusy(true);
+    const { error: requestError } = await supabase.rpc("review_jacket_reward", { target_id: id });
+    if (requestError) setError(requestError.message); else await load();
+    setBusy(false);
+  };
   const openPrivateFile = async (bucket: string, path: string) => {
     const { data, error: linkError } = await supabase.storage.from(bucket).createSignedUrl(path, 60);
     if (linkError || !data?.signedUrl) { setError(linkError?.message ?? "No pudimos abrir el adjunto."); return; }
@@ -312,7 +318,7 @@ export default function AdministracionScreen() {
     {section === "resumen" ? <>
     <View style={styles.stats}>
       <View style={[styles.card, styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.number, { color: colors.primary }]}>{reviewItems.length + identities.length + feedback.length + cashRewards.length}</Text>
+        <Text style={[styles.number, { color: colors.primary }]}>{reviewItems.length + identities.length + feedback.length + rewardClaims.length}</Text>
         <Text style={{ color: colors.text.secondary }}>Solicitudes por revisar</Text>
       </View>
       <View style={[styles.card, styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -525,13 +531,24 @@ export default function AdministracionScreen() {
         {item.file_paths.map((path, index) => <Pressable key={path} onPress={() => void openPrivateFile("user-claims", path)}><Text style={{ color: colors.primary }}>Ver adjunto {index + 1}</Text></Pressable>)}
         <Pressable disabled={busy} onPress={() => void markFeedback(item.id)} style={[styles.button, { backgroundColor: colors.primary, alignSelf: "flex-start" }]}><Text style={styles.buttonText}>Marcar resuelto</Text></Pressable>
       </View>)}
-      <Text style={[styles.heading, { color: colors.text.primary }]}>Premios por pagar ({cashRewards.length})</Text>
-      {cashRewards.map((item) => <View key={item.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.itemName, { color: colors.text.primary }]}>@{players.find((player) => player.id === item.user_id)?.username ?? "jugador"} · ARS {item.amount}</Text>
-        <Pressable disabled={busy} onPress={() => Alert.alert("Confirmar pago", "Marcá el premio como pagado solo después de transferirlo.", [
-          { text: "Cancelar", style: "cancel" }, { text: "Ya transferí", onPress: () => void markCashPaid(item.id) },
-        ])} style={[styles.button, { backgroundColor: colors.primary, alignSelf: "flex-start" }]}><Text style={styles.buttonText}>Marcar pagado</Text></Pressable>
-      </View>)}
+      <Text style={[styles.heading, { color: colors.text.primary }]}>Premios pendientes ({rewardClaims.length})</Text>
+      {rewardClaims.map((item) => {
+        const isJacket = item.reward_type === "jacket";
+        return <View key={item.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.itemName, { color: colors.text.primary }]}>
+            @{players.find((player) => player.id === item.user_id)?.username ?? "jugador"} ·
+            {isJacket ? " Campera personalizada · 200 aciertos" : ` ARS ${item.amount} · ${item.milestone} aciertos`}
+          </Text>
+          <Pressable disabled={busy} onPress={() => Alert.alert(
+            isJacket ? "Confirmar entrega" : "Confirmar pago",
+            isJacket ? "Marcá la campera como entregada cuando ya se la hayas dado al jugador." : "Marcá el premio como pagado solo después de transferirlo.",
+            [{ text: "Cancelar", style: "cancel" }, { text: isJacket ? "Ya entregué" : "Ya transferí",
+              onPress: () => void (isJacket ? markJacketDelivered(item.id) : markCashPaid(item.id)) }],
+          )} style={[styles.button, { backgroundColor: colors.primary, alignSelf: "flex-start" }]}>
+            <Text style={styles.buttonText}>{isJacket ? "Marcar entregada" : "Marcar pagado"}</Text>
+          </Pressable>
+        </View>;
+      })}
     </> : null}
 
     {role === "superadmin" && section === "equipo" ? <>
