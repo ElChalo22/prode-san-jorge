@@ -23,6 +23,7 @@ import type { PredictionValue } from "../../database/types";
 
 import { supabase } from "../../lib/supabase";
 import { useAppAppearance } from "../../lib/appearance";
+import { useStaffRole } from "../../lib/useStaffRole";
 import {
   subscribeToLiveMatches,
   usePredictionStore,
@@ -36,6 +37,7 @@ const esPronosticoDoble = (
 
 export default function PronosticosScreen() {
   const { isDark } = useAppAppearance();
+  const { role } = useStaffRole();
   const styles = useMemo(() => makeStyles(isDark), [isDark]);
   const params = useLocalSearchParams<{
     gameId?: string | string[];
@@ -80,6 +82,7 @@ export default function PronosticosScreen() {
   const [approvalNotice, setApprovalNotice] = useState<string | null>(null);
   const [summary, setSummary] = useState({ players: 0, jackpot: 0 });
   const locked = paymentInfo?.status === "confirmed";
+  const canViewCommunity = role === "admin" || role === "superadmin" || locked;
 
   const loadCommunity = useCallback(async (selectedGameId: string) => {
     const [picksResult, playersResult, summaryResult, authResult] = await Promise.all([
@@ -748,7 +751,7 @@ export default function PronosticosScreen() {
 
         <View style={styles.progressCard}>
           <Text style={styles.progressTitle}>Jugadores confirmados ({summary.players})</Text>
-          {!locked ? <Text style={styles.progressMessage}>Podrás ver a los jugadores y sus pronósticos cuando aprueben tu participación.</Text> :
+          {!canViewCommunity ? <Text style={styles.progressMessage}>Podrás ver a los jugadores y sus pronósticos cuando aprueben tu participación.</Text> :
             confirmedPlayers.length === 0 ? <Text style={styles.progressMessage}>Todavía no hay jugadores confirmados.</Text> :
             [...confirmedPlayers].sort((a, b) => {
               if (a.user_id === viewerId) return -1;
