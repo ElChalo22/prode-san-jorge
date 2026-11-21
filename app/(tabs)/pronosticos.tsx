@@ -750,7 +750,7 @@ export default function PronosticosScreen() {
         </View>
 
         <View style={styles.progressCard}>
-          <Text style={styles.progressTitle}>Jugadores confirmados ({summary.players})</Text>
+          <Text style={styles.progressTitle}>{role ? "Jugadores y pronósticos" : `Jugadores confirmados (${summary.players})`}{role ? ` (${confirmedPlayers.length})` : ""}</Text>
           {!canViewCommunity ? <Text style={styles.progressMessage}>Podrás ver a los jugadores y sus pronósticos cuando aprueben tu participación.</Text> :
             confirmedPlayers.length === 0 ? <Text style={styles.progressMessage}>Todavía no hay jugadores confirmados.</Text> :
             [...confirmedPlayers].sort((a, b) => {
