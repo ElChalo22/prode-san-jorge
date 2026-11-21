@@ -12,14 +12,27 @@ export function useStaffRole() {
     let active = true;
     const refresh = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      const result = user
-        ? await supabase.from("profiles").select("role").eq("id", user.id).single()
-        : null;
-      if (active) {
-        setRole(result?.data?.role === "superadmin" ? "superadmin" : result?.data?.role === "admin" ? "admin" : null);
-        setLoading(false);
+      if (!user) {
+        if (active) {
+          setRole(null);
+          setLoading(false);
+        }
+        return;
       }
+
+      const [staffResult, profileResult] = await Promise.all([
+        supabase.rpc("is_staff"),
+        supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+      ]);
+      if (!active) return;
+
+      const profileRole = profileResult.data?.role;
+      const isStaff = staffResult.data === true ||
+        profileRole === "admin" || profileRole === "superadmin";
+      setRole(profileRole === "superadmin" ? "superadmin" : isStaff ? "admin" : null);
+      setLoading(false);
     };
+
     void refresh();
     const { data: subscription } = supabase.auth.onAuthStateChange(() => { void refresh(); });
     return () => { active = false; subscription.subscription.unsubscribe(); };
